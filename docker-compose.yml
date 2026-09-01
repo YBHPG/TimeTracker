@@ -1,0 +1,13 @@
+services:
+  time-tracker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: time-tracker
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "${PORT:-8000}:8000"
+    volumes:
+      - ./data:/data
