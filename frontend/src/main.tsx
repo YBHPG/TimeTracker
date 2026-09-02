@@ -10,7 +10,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 );
 
 // Register PWA Service Worker for standalone SPA installation
-if ('serviceWorker' in navigator && process.env.NODE_ENV !== 'test') {
+if ('serviceWorker' in navigator && import.meta.env.MODE !== 'test') {
   window.addEventListener('load', () => {
     navigator.serviceWorker
       .register('/sw.js')
