@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a" />
+      <stop offset="100%" stop-color="#0284c7" />
+    </linearGradient>
+    <linearGradient id="dialGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="100%" stop-color="#0ea5e9" />
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="12" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+  
+  <!-- App Icon Background with smooth rounded rect -->
+  <rect width="512" height="512" rx="112" fill="#0f172a"/>
+  
+  <!-- Outer glowing accent ring -->
+  <circle cx="256" cy="256" r="176" fill="none" stroke="url(#dialGrad)" stroke-width="28" stroke-linecap="round" filter="url(#glow)" opacity="0.4"/>
+  
+  <!-- Main Clock Dial Ring -->
+  <circle cx="256" cy="256" r="176" fill="#090d16" stroke="url(#dialGrad)" stroke-width="24" stroke-linecap="round"/>
+  
+  <!-- 12, 3, 6, 9 hour tick marks -->
+  <line x1="256" y1="108" x2="256" y2="128" stroke="#38bdf8" stroke-width="10" stroke-linecap="round" opacity="0.8"/>
+  <line x1="384" y1="256" x2="404" y2="256" stroke="#38bdf8" stroke-width="10" stroke-linecap="round" opacity="0.8"/>
+  <line x1="256" y1="384" x2="256" y2="404" stroke="#38bdf8" stroke-width="10" stroke-linecap="round" opacity="0.8"/>
+  <line x1="108" y1="256" x2="128" y2="256" stroke="#38bdf8" stroke-width="10" stroke-linecap="round" opacity="0.8"/>
+  
+  <!-- Clock hands -->
+  <!-- Hour hand -->
+  <line x1="256" y1="256" x2="256" y2="168" stroke="#ffffff" stroke-width="18" stroke-linecap="round"/>
+  <!-- Minute hand -->
+  <line x1="256" y1="256" x2="330" y2="200" stroke="#38bdf8" stroke-width="14" stroke-linecap="round"/>
+  
+  <!-- Center Pin / Pivot -->
+  <circle cx="256" cy="256" r="18" fill="#38bdf8"/>
+  <circle cx="256" cy="256" r="8" fill="#ffffff"/>
+</svg>

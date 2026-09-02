@@ -33,7 +33,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   };
 
   return (
-    <div className="fixed bottom-6 inset-x-0 z-40 flex justify-center px-4 pointer-events-none">
+    <div className="fixed bottom-[calc(1.5rem+env(safe-area-inset-bottom,0px))] inset-x-0 z-40 flex justify-center px-4 pointer-events-none">
       <nav className="pointer-events-auto flex items-center gap-1 bg-[#121214] dark:bg-white text-white dark:text-slate-900 p-1.5 rounded-full shadow-2xl border border-slate-800/40 dark:border-slate-200/40 backdrop-blur-lg transition-all duration-300">
         {/* Home Tab Button */}
         <button
