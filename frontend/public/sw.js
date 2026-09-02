@@ -1,4 +1,4 @@
-const CACHE_NAME = 'timetracker-v1';
+const CACHE_NAME = 'timetracker-v1.1';
 const PRECACHE_ASSETS = [
   '/',
   '/index.html',
@@ -48,31 +48,35 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 3. Static assets & Navigation: Stale-While-Revalidate
+  // 3. Static assets: Stale-While-Revalidate
+  if (request.mode === 'navigate') {
+    // Navigation: network-first — всегда проверяем свежесть (и Authelia!)
+    event.respondWith(
+      fetch(request)
+        .then((networkResponse) => {
+          // Кэшируем только успешные ответы БЕЗ редиректа
+          if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
+            const responseToCache = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, responseToCache));
+          }
+          return networkResponse;
+        })
+        .catch(() => caches.match('/index.html'))
+    );
+    return;
+  }
+  // Обычные GET (assets): stale-while-revalidate как раньше
   event.respondWith(
     caches.match(request).then((cachedResponse) => {
       const fetchPromise = fetch(request)
         .then((networkResponse) => {
-          if (
-            networkResponse &&
-            networkResponse.status === 200 &&
-            networkResponse.type === 'basic'
-          ) {
+          if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
             const responseToCache = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(request, responseToCache);
-            });
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, responseToCache));
           }
           return networkResponse;
         })
-        .catch(() => {
-          // If offline and requesting navigation, return cached index.html
-          if (request.mode === 'navigate') {
-            return caches.match('/index.html');
-          }
-          return cachedResponse;
-        });
-
+        .catch(() => cachedResponse);
       return cachedResponse || fetchPromise;
     })
   );
