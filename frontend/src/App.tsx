@@ -65,15 +65,15 @@ export const App: React.FC = () => {
   const activeTask = useMemo(() => tasks.find((t) => t.is_active), [tasks]);
   const hasActiveTask = Boolean(activeTask);
 
-  // Trigger re-render every second when timer is running
-  useTimerTick(hasActiveTask);
+  // Trigger re-render every second when timer is running and get tick value
+  const tick = useTimerTick(hasActiveTask);
 
-  // Total seconds spent today
+  // Total seconds spent today (recalculated when tasks change or on each tick)
   const totalDaySeconds = useMemo(() => {
     return tasks.reduce((sum, task) => sum + calculateTaskDurationSeconds(task), 0);
-  }, [tasks]);
+  }, [tasks, tick]);
 
-  // Update document title dynamically
+  // Update document title dynamically every second when a task is running
   useEffect(() => {
     if (activeTask) {
       const dur = calculateTaskDurationSeconds(activeTask);
@@ -81,7 +81,7 @@ export const App: React.FC = () => {
     } else {
       document.title = 'TimeTracker — Учет времени';
     }
-  }, [activeTask, totalDaySeconds]);
+  }, [activeTask, tick]);
 
   // Fetch tasks for the selected date
   const loadTasks = useCallback(async (dateStr: string) => {

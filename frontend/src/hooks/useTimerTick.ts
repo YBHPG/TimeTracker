@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
-export function useTimerTick(isActive: boolean) {
-  const [, setTick] = useState(0);
+export function useTimerTick(isActive: boolean): number {
+  const [tick, setTick] = useState(0);
 
   useEffect(() => {
     if (!isActive) return;
@@ -12,4 +12,6 @@ export function useTimerTick(isActive: boolean) {
 
     return () => clearInterval(interval);
   }, [isActive]);
+
+  return tick;
 }
