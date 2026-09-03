@@ -1,13 +1,23 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Task } from '../types';
 import { getTodayDateStr, parseDateSafe } from '../utils/formatters';
 
 interface TimelineStripProps {
   tasks: Task[];
   selectedDate: string;
+  onSelectTask?: (taskId: string) => void;
+  onHoverTask?: (taskId: string | null) => void;
 }
 
-export const TimelineStrip: React.FC<TimelineStripProps> = ({ tasks, selectedDate }) => {
+export const TimelineStrip: React.FC<TimelineStripProps> = ({
+  tasks,
+  selectedDate,
+  onSelectTask,
+  onHoverTask,
+}) => {
+  const [hoveredBlock, setHoveredBlock] = useState<any | null>(null);
+  const hoveredTaskId = hoveredBlock ? hoveredBlock.taskId : null;
+
   // Current time marker calculation (0 to 100% of 24h)
   const now = new Date();
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
@@ -69,49 +79,25 @@ export const TimelineStrip: React.FC<TimelineStripProps> = ({ tasks, selectedDat
     return blocks;
   }, [tasks, currentMinutes, isToday]);
 
-  // Decorative activity constellation dots above timeline
-  const dots = useMemo(() => {
-    // Generate static dot positions based on task blocks
-    const dotList: Array<{ left: number; top: number; size: number }> = [];
-    
-    // Default decorative aesthetic dots
-    const basePositions = [
-      { x: 42, y: 12, s: 3 },
-      { x: 45, y: 22, s: 2.5 },
-      { x: 48, y: 14, s: 3 },
-      { x: 58, y: 18, s: 2 },
-      { x: 64, y: 16, s: 3 },
-      { x: 67, y: 24, s: 2.5 },
-      { x: 70, y: 15, s: 3 },
-    ];
-
-    basePositions.forEach((p) => {
-      dotList.push({ left: p.x, top: p.y, size: p.s });
-    });
-
-    return dotList;
-  }, []);
-
   return (
-    <div className="w-full select-none py-2">
-      {/* Activity Dots Area */}
-      <div className="relative h-7 w-full overflow-hidden">
-        {dots.map((d, i) => (
-          <span
-            key={i}
-            style={{
-              left: `${d.left}%`,
-              top: `${d.top}px`,
-              width: `${d.size}px`,
-              height: `${d.size}px`,
-            }}
-            className="absolute rounded-full bg-slate-900 dark:bg-slate-100 transition-all opacity-80"
-          />
-        ))}
-      </div>
-
+    <div className="w-full select-none pt-6 pb-2">
       {/* Main 24-hour Timeline Bar */}
       <div className="relative w-full">
+        {/* Custom Hover Badge (Coral accent matching NOW pill, showing only task title) */}
+        {hoveredBlock && (
+          <div
+            style={{
+              left: `${Math.max(8, Math.min(92, hoveredBlock.leftPct + hoveredBlock.widthPct / 2))}%`,
+            }}
+            className="absolute -top-7 -translate-x-1/2 pointer-events-none z-20 flex flex-col items-center animate-in fade-in zoom-in-95 duration-100"
+          >
+            <div className="px-2.5 py-0.5 rounded-full bg-[#E0533C] text-white text-[10px] font-bold tracking-tight shadow-md whitespace-nowrap max-w-[220px] truncate">
+              {hoveredBlock.taskTitle}
+            </div>
+            <div className="w-0 h-0 border-x-4 border-x-transparent border-t-4 border-t-[#E0533C]" />
+          </div>
+        )}
+
         {/* Baseline Bar Background */}
         <div className="relative h-4 w-full bg-slate-100 dark:bg-slate-800/60 rounded-sm overflow-hidden flex items-center">
           {/* Subtle 3-hour tick marks */}
@@ -123,20 +109,40 @@ export const TimelineStrip: React.FC<TimelineStripProps> = ({ tasks, selectedDat
 
           {/* Render Task Interval Blocks */}
           {intervalBlocks.map((b) => {
+            const isSameTask = Boolean(hoveredTaskId && b.taskId === hoveredTaskId);
+            const isOtherTask = Boolean(hoveredTaskId && b.taskId !== hoveredTaskId);
+
+            let colorClasses = '';
+            if (isSameTask) {
+              // Entire fragment filled solidly with accent color #E0533C
+              colorClasses = 'bg-[#E0533C] z-10 scale-y-110 shadow-sm';
+            } else if (b.pattern === 'emerald') {
+              colorClasses = 'bg-[#E0533C] animate-pulse';
+            } else if (b.pattern === 'hatched') {
+              colorClasses =
+                'bg-slate-900 dark:bg-slate-100 bg-[repeating-linear-gradient(45deg,transparent,transparent_2px,#64748b_2px,#64748b_4px)] dark:bg-[repeating-linear-gradient(45deg,transparent,transparent_2px,#94a3b8_2px,#94a3b8_4px)]';
+            } else {
+              colorClasses = 'bg-slate-900 dark:bg-slate-100';
+            }
+
             return (
               <div
                 key={b.id}
-                title={`${b.taskTitle} (${b.isRunning ? 'Идет сейчас' : 'Завершено'})`}
+                onMouseEnter={() => {
+                  setHoveredBlock(b);
+                  if (onHoverTask) onHoverTask(b.taskId);
+                }}
+                onMouseLeave={() => {
+                  setHoveredBlock(null);
+                  if (onHoverTask) onHoverTask(null);
+                }}
+                onClick={() => onSelectTask && onSelectTask(b.taskId)}
                 style={{
                   left: `${b.leftPct}%`,
                   width: `${b.widthPct}%`,
                 }}
-                className={`absolute top-0 bottom-0 transition-all ${
-                  b.pattern === 'emerald'
-                    ? 'bg-[#E0533C] animate-pulse'
-                    : b.pattern === 'hatched'
-                    ? 'bg-slate-900 dark:bg-slate-100 bg-[repeating-linear-gradient(45deg,transparent,transparent_2px,#64748b_2px,#64748b_4px)] dark:bg-[repeating-linear-gradient(45deg,transparent,transparent_2px,#94a3b8_2px,#94a3b8_4px)]'
-                    : 'bg-slate-900 dark:bg-slate-100'
+                className={`absolute top-0 bottom-0 cursor-pointer transition-all duration-150 ${colorClasses} ${
+                  isOtherTask ? 'opacity-25' : 'opacity-100'
                 }`}
               />
             );

@@ -19,6 +19,7 @@ class Task(Base):
     id = Column(String(36), primary_key=True, default=generate_uuid)
     date = Column(String(10), nullable=False, index=True)  # Format: YYYY-MM-DD
     title = Column(String(255), nullable=False)
+    category = Column(String(50), nullable=True, default="work")
     order_index = Column(Integer, default=0)
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)

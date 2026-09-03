@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { X, Play, Plus } from 'lucide-react';
 import { Switch } from './Checkbox';
+import { TaskCategory, CATEGORIES } from '../types';
 
 interface NewTaskModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddTask: (title: string, autoStart: boolean) => Promise<void>;
+  onAddTask: (title: string, autoStart: boolean, category: TaskCategory) => Promise<void>;
   isLoading?: boolean;
 }
 
@@ -16,6 +17,7 @@ export const NewTaskModal: React.FC<NewTaskModalProps> = ({
   isLoading = false,
 }) => {
   const [title, setTitle] = useState('');
+  const [category, setCategory] = useState<TaskCategory>('work');
   const [autoStart, setAutoStart] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -28,8 +30,9 @@ export const NewTaskModal: React.FC<NewTaskModalProps> = ({
 
     setIsSubmitting(true);
     try {
-      await onAddTask(trimmed, autoStart);
+      await onAddTask(trimmed, autoStart, category);
       setTitle('');
+      setCategory('work');
       onClose();
     } finally {
       setIsSubmitting(false);
@@ -72,6 +75,29 @@ export const NewTaskModal: React.FC<NewTaskModalProps> = ({
             />
           </div>
 
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
+              Категория
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              {CATEGORIES.map((cat) => (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => setCategory(cat.id)}
+                  className={`flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl text-xs font-medium border transition-all ${
+                    category === cat.id
+                      ? 'border-slate-900 dark:border-white bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-sm font-semibold'
+                      : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  <span className={`w-2 h-2 rounded-full ${cat.dotBg} flex-shrink-0`} />
+                  <span className="truncate">{cat.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="py-1">
             <Switch
               checked={autoStart}
@@ -96,10 +122,24 @@ export const NewTaskModal: React.FC<NewTaskModalProps> = ({
             <button
               type="submit"
               disabled={!title.trim() || isSubmitting || isLoading}
-              className="flex items-center gap-2 px-6 py-2.5 rounded-full bg-slate-900 hover:bg-black dark:bg-white dark:hover:bg-slate-200 text-white dark:text-slate-900 text-xs font-semibold tracking-wide transition shadow-md disabled:opacity-40"
+              className="flex items-center justify-center min-w-[105px] px-6 py-2.5 rounded-full bg-slate-900 hover:bg-black dark:bg-white dark:hover:bg-slate-200 text-white dark:text-slate-900 text-xs font-semibold tracking-wide transition shadow-md disabled:opacity-40"
             >
-              <Plus className="w-4 h-4" />
-              <span>Создать</span>
+              <span
+                key={autoStart ? 'start' : 'create'}
+                className="flex items-center gap-1.5 animate-in fade-in zoom-in-95 duration-150"
+              >
+                {autoStart ? (
+                  <>
+                    <Play className="w-3.5 h-3.5 fill-current text-emerald-400 dark:text-emerald-500" />
+                    <span>Начать</span>
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-4 h-4" />
+                    <span>Создать</span>
+                  </>
+                )}
+              </span>
             </button>
           </div>
         </form>

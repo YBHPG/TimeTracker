@@ -19,8 +19,33 @@ export function useTheme() {
 
       if (isDark) {
         root.classList.add('dark');
+        root.style.colorScheme = 'dark';
       } else {
         root.classList.remove('dark');
+        root.style.colorScheme = 'light';
+      }
+
+      // Sync <meta name="color-scheme"> for browsers and extensions like Dark Reader
+      let metaColorScheme = document.querySelector('meta[name="color-scheme"]');
+      if (!metaColorScheme) {
+        metaColorScheme = document.createElement('meta');
+        metaColorScheme.setAttribute('name', 'color-scheme');
+        document.head.appendChild(metaColorScheme);
+      }
+      metaColorScheme.setAttribute('content', isDark ? 'dark' : 'light');
+
+      // Sync <meta name="darkreader-lock"> so Dark Reader doesn't invert native dark mode
+      let darkreaderLock = document.querySelector('meta[name="darkreader-lock"]');
+      if (isDark) {
+        if (!darkreaderLock) {
+          darkreaderLock = document.createElement('meta');
+          darkreaderLock.setAttribute('name', 'darkreader-lock');
+          document.head.appendChild(darkreaderLock);
+        }
+      } else {
+        if (darkreaderLock) {
+          darkreaderLock.remove();
+        }
       }
     };
 

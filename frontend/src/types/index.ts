@@ -8,10 +8,54 @@ export interface TimeInterval {
   updated_at: string;
 }
 
+export type TaskCategory = 'work' | 'personal' | 'study';
+
+export interface CategoryConfig {
+  id: TaskCategory;
+  label: string;
+  color: string;
+  dotBg: string;
+  badgeClass: string;
+  activeBadgeClass: string;
+}
+
+export const CATEGORIES: CategoryConfig[] = [
+  {
+    id: 'work',
+    label: 'Работа',
+    color: '#3B82F6',
+    dotBg: 'bg-blue-500',
+    badgeClass: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20',
+    activeBadgeClass: 'bg-blue-500 text-white border-transparent',
+  },
+  {
+    id: 'personal',
+    label: 'Личное',
+    color: '#10B981',
+    dotBg: 'bg-emerald-500',
+    badgeClass: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20',
+    activeBadgeClass: 'bg-emerald-500 text-white border-transparent',
+  },
+  {
+    id: 'study',
+    label: 'Учёба',
+    color: '#8B5CF6',
+    dotBg: 'bg-purple-500',
+    badgeClass: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20',
+    activeBadgeClass: 'bg-purple-500 text-white border-transparent',
+  },
+];
+
+export function getCategoryConfig(category?: string | null): CategoryConfig {
+  const found = CATEGORIES.find((c) => c.id === category);
+  return found || CATEGORIES[0];
+}
+
 export interface Task {
   id: string;
   title: string;
   date: string; // YYYY-MM-DD
+  category?: TaskCategory | string | null;
   order_index: number;
   created_at: string;
   updated_at: string;
@@ -39,12 +83,14 @@ export interface DaySummary {
 export interface CreateTaskPayload {
   title: string;
   date: string;
+  category?: TaskCategory | string;
   auto_start?: boolean;
 }
 
 export interface UpdateTaskPayload {
   title?: string;
   date?: string;
+  category?: TaskCategory | string | null;
   order_index?: number;
 }
 

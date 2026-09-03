@@ -64,6 +64,16 @@ def delete_task(
     return None
 
 
+@router.post("/tasks/bulk-delete", status_code=status.HTTP_204_NO_CONTENT)
+def bulk_delete_tasks(
+    payload: schemas.BulkDeleteTasksPayload,
+    db: Session = Depends(get_db),
+):
+    """Delete multiple tasks and their associated time intervals at once."""
+    crud.bulk_delete_tasks(db, payload.task_ids)
+    return None
+
+
 @router.post("/tasks/{task_id}/start", response_model=schemas.TaskOut)
 def start_timer(
     task_id: str,

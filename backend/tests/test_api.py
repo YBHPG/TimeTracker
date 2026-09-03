@@ -170,8 +170,87 @@ def test_days_stats_and_summary(client):
 
 
 def test_export_csv(client):
-    client.post("/api/tasks", json={"title": "Экспортная задача", "date": "2026-09-02", "auto_start": False})
+    client.post("/api/tasks", json={"title": "Экспортная задача", "date": "2026-09-02", "category": "work", "auto_start": False})
     csv_res = client.get("/api/export/csv")
     assert csv_res.status_code == 200
     assert "text/csv" in csv_res.headers["content-type"]
     assert "Экспортная задача" in csv_res.text
+    assert "Category" in csv_res.text
+    assert "work" in csv_res.text
+
+
+def test_task_categories_crud(client):
+    # 1. Create with category
+    res = client.post("/api/tasks", json={
+        "title": "Учеба Python",
+        "date": "2026-09-02",
+        "category": "study",
+        "auto_start": False
+    })
+    assert res.status_code == 201
+    data = res.json()
+    assert data["category"] == "study"
+    task_id = data["id"]
+
+    # 2. Update category
+    patch_res = client.patch(f"/api/tasks/{task_id}", json={"category": "personal"})
+    assert patch_res.status_code == 200
+    assert patch_res.json()["category"] == "personal"
+
+
+def test_duplicate_task_name_creates_interval_in_existing_task(client):
+    # 1. Create initial task
+    res1 = client.post("/api/tasks", json={
+        "title": "Спортзал",
+        "date": "2026-09-02",
+        "category": "personal",
+        "auto_start": True
+    })
+    assert res1.status_code == 201
+    task1 = res1.json()
+    task1_id = task1["id"]
+    assert task1["is_active"] is True
+    assert len(task1["intervals"]) == 1
+
+    # 2. Pause the task
+    client.post(f"/api/tasks/{task1_id}/pause")
+
+    # 3. Create task with same name on same date (case-insensitive with whitespace)
+    res2 = client.post("/api/tasks", json={
+        "title": "  спортзал  ",
+        "date": "2026-09-02",
+        "category": "personal",
+        "auto_start": True
+    })
+    assert res2.status_code == 200 or res2.status_code == 201
+    task2 = res2.json()
+
+    # Must be the exact same task ID
+    assert task2["id"] == task1_id
+    assert task2["is_active"] is True
+    # Now has 2 intervals (1 completed, 1 active)
+    assert len(task2["intervals"]) == 2
+
+    # Check total tasks count on that day - must be still 1
+    tasks_res = client.get("/api/tasks?date=2026-09-02")
+    assert len(tasks_res.json()) == 1
+
+
+def test_bulk_delete_tasks(client):
+    # Create 3 tasks
+    r1 = client.post("/api/tasks", json={"title": "T1", "date": "2026-09-02", "auto_start": False})
+    r2 = client.post("/api/tasks", json={"title": "T2", "date": "2026-09-02", "auto_start": False})
+    r3 = client.post("/api/tasks", json={"title": "T3", "date": "2026-09-02", "auto_start": False})
+    id1 = r1.json()["id"]
+    id2 = r2.json()["id"]
+    id3 = r3.json()["id"]
+
+    # Bulk delete 2 tasks
+    del_res = client.post("/api/tasks/bulk-delete", json={"task_ids": [id1, id3]})
+    assert del_res.status_code == 204
+
+    # Verify remaining tasks
+    remaining = client.get("/api/tasks?date=2026-09-02").json()
+    assert len(remaining) == 1
+    assert remaining[0]["id"] == id2
+

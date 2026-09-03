@@ -30,6 +30,7 @@ def export_csv(
         "Task ID",
         "Date",
         "Title",
+        "Category",
         "Interval ID",
         "Start Time (UTC)",
         "End Time (UTC)",
@@ -38,11 +39,13 @@ def export_csv(
     ])
 
     for task in tasks:
+        task_category = getattr(task, "category", "work") or "work"
         if not task.intervals:
             writer.writerow([
                 task.id,
                 task.date,
                 task.title,
+                task_category,
                 "",
                 "",
                 "",
@@ -61,6 +64,7 @@ def export_csv(
                     task.id,
                     task.date,
                     task.title,
+                    task_category,
                     inv.id,
                     inv.start_time.isoformat() if inv.start_time else "",
                     inv.end_time.isoformat() if inv.end_time else "RUNNING",

@@ -1,7 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Play, Pause, Plus, Trash2, Edit2, Check, X, ChevronDown, ChevronUp } from 'lucide-react';
-import { Task, TimeInterval } from '../types';
+import { Task, TimeInterval, TaskCategory } from '../types';
 import { IntervalItem } from './IntervalItem';
+import { CategoryDropdown } from './CategoryDropdown';
+import { ConfirmModal } from './ConfirmModal';
+import { Checkbox } from './Checkbox';
 import { calculateTaskDurationSeconds, formatDurationDigital, formatDurationHuman } from '../utils/formatters';
 
 interface TaskItemProps {
@@ -9,10 +12,17 @@ interface TaskItemProps {
   onStart: (taskId: string) => Promise<void>;
   onPause: (taskId: string) => Promise<void>;
   onUpdateTitle: (taskId: string, newTitle: string) => Promise<void>;
+  onUpdateCategory?: (taskId: string, newCategory: TaskCategory) => Promise<void>;
   onDeleteTask: (taskId: string) => Promise<void>;
   onOpenAddInterval: (task: Task) => void;
   onEditInterval: (task: Task, interval: TimeInterval) => void;
   onDeleteInterval: (intervalId: string) => Promise<void>;
+  isSelectionMode?: boolean;
+  isSelected?: boolean;
+  onToggleSelect?: (taskId: string) => void;
+  isForceExpanded?: boolean;
+  isHighlighted?: boolean;
+  isTimelineHovered?: boolean;
 }
 
 export const TaskItem: React.FC<TaskItemProps> = ({
@@ -20,15 +30,29 @@ export const TaskItem: React.FC<TaskItemProps> = ({
   onStart,
   onPause,
   onUpdateTitle,
+  onUpdateCategory,
   onDeleteTask,
   onOpenAddInterval,
   onEditInterval,
   onDeleteInterval,
+  isSelectionMode = false,
+  isSelected = false,
+  onToggleSelect,
+  isForceExpanded = false,
+  isHighlighted = false,
+  isTimelineHovered = false,
 }) => {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editedTitle, setEditedTitle] = useState(task.title);
   const [isUpdating, setIsUpdating] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false);
+
+  useEffect(() => {
+    if (isForceExpanded) {
+      setIsExpanded(true);
+    }
+  }, [isForceExpanded]);
 
   const durationSec = calculateTaskDurationSeconds(task);
   const isRunning = task.is_active;
@@ -71,25 +95,45 @@ export const TaskItem: React.FC<TaskItemProps> = ({
     }
   };
 
-  const handleDelete = async (e: React.MouseEvent) => {
+  const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (window.confirm(`Удалить задачу "${task.title}" и всю историю времени?`)) {
-      setIsUpdating(true);
-      try {
-        await onDeleteTask(task.id);
-      } finally {
-        setIsUpdating(false);
-      }
-    }
+    setIsConfirmDeleteOpen(true);
   };
 
   return (
-    <div className={`border-b border-slate-200/70 dark:border-slate-800/80 transition-all ${isRunning ? 'bg-[#E0533C]/[0.03] dark:bg-[#E0533C]/[0.07] -mx-2 px-2 rounded-2xl' : ''}`}>
+    <div
+      id={`task-${task.id}`}
+      className={`rounded-2xl transition-all duration-300 ${
+        isHighlighted
+          ? 'ring-2 ring-[#E0533C] bg-[#E0533C]/[0.08] dark:bg-[#E0533C]/[0.15] shadow-sm'
+          : isTimelineHovered
+          ? 'ring-1 ring-[#E0533C]/60 bg-[#E0533C]/[0.04] dark:bg-[#E0533C]/[0.08]'
+          : isRunning
+          ? 'bg-[#E0533C]/[0.03] dark:bg-[#E0533C]/[0.07]'
+          : ''
+      }`}
+    >
       {/* Main Row Matching Design */}
       <div
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="group py-4 px-1.5 flex items-start justify-between gap-4 cursor-pointer hover:bg-slate-100/60 dark:hover:bg-slate-800/40 rounded-2xl transition-colors"
+        onClick={() => {
+          if (isSelectionMode) {
+            if (onToggleSelect) onToggleSelect(task.id);
+          } else {
+            setIsExpanded(!isExpanded);
+          }
+        }}
+        className="group py-3 px-3 flex items-start justify-between gap-3.5 cursor-pointer hover:bg-slate-100/60 dark:hover:bg-slate-800/40 rounded-2xl transition-colors"
       >
+        {/* Selection Checkbox */}
+        {isSelectionMode && (
+          <div className="pt-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+            <Checkbox
+              checked={isSelected}
+              onChange={() => onToggleSelect && onToggleSelect(task.id)}
+            />
+          </div>
+        )}
+
         {/* Left Column: Title & Pill Tag */}
         <div className="flex-1 min-w-0">
           {isEditingTitle ? (
@@ -130,22 +174,35 @@ export const TaskItem: React.FC<TaskItemProps> = ({
               }`}>
                 {task.title}
               </h3>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setIsEditingTitle(true);
-                }}
-                className="p-1 text-slate-400 opacity-0 group-hover:opacity-100 hover:text-slate-700 dark:hover:text-slate-200 transition"
-                title="Переименовать"
-              >
-                <Edit2 className="w-3.5 h-3.5" />
-              </button>
+              {!isSelectionMode && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsEditingTitle(true);
+                  }}
+                  className="p-1 text-slate-400 opacity-0 group-hover:opacity-100 hover:text-slate-700 dark:hover:text-slate-200 transition"
+                  title="Переименовать"
+                >
+                  <Edit2 className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
           )}
 
           {/* Pill Tags with Signature Coral Accent when active */}
-          <div className="flex items-center gap-2 mt-2">
+          <div className="flex items-center gap-2 mt-2 flex-wrap">
+            {/* Custom Category Dropdown Pill */}
+            <CategoryDropdown
+              value={task.category}
+              onChange={async (newCat) => {
+                if (onUpdateCategory) {
+                  await onUpdateCategory(task.id, newCat);
+                }
+              }}
+              variant="badge"
+            />
+
             <span
               className={`inline-flex items-center px-3 py-0.5 rounded-full text-xs font-medium border transition-colors ${
                 isRunning
@@ -172,30 +229,32 @@ export const TaskItem: React.FC<TaskItemProps> = ({
         </div>
 
         {/* Right Column: Rounded Square Control Button with Coral Accent when active */}
-        <div className="flex items-center gap-3 flex-shrink-0 pt-0.5">
-          <button
-            type="button"
-            onClick={handleToggleTimer}
-            disabled={isUpdating}
-            title={isRunning ? 'Поставить на паузу' : 'Запустить таймер'}
-            className={`w-11 h-11 rounded-2xl flex items-center justify-center transition-all duration-200 ${
-              isRunning
-                ? 'bg-[#E0533C] hover:bg-[#c94530] text-white shadow-lg shadow-[#E0533C]/30 scale-105 ring-2 ring-[#E0533C]/40'
-                : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
-            }`}
-          >
-            {isRunning ? (
-              <Pause className="w-4 h-4 fill-current" />
-            ) : (
-              <Play className="w-4 h-4 fill-current ml-0.5" />
-            )}
-          </button>
-        </div>
+        {!isSelectionMode && (
+          <div className="flex items-center gap-3 flex-shrink-0 pt-0.5">
+            <button
+              type="button"
+              onClick={handleToggleTimer}
+              disabled={isUpdating}
+              title={isRunning ? 'Поставить на паузу' : 'Запустить таймер'}
+              className={`w-11 h-11 rounded-2xl flex items-center justify-center transition-all duration-200 ${
+                isRunning
+                  ? 'bg-[#E0533C] hover:bg-[#c94530] text-white shadow-lg shadow-[#E0533C]/30 scale-105 ring-2 ring-[#E0533C]/40'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+              }`}
+            >
+              {isRunning ? (
+                <Pause className="w-4 h-4 fill-current" />
+              ) : (
+                <Play className="w-4 h-4 fill-current ml-0.5" />
+              )}
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Expandable Section: Unnumbered Intervals List */}
-      {isExpanded && (
-        <div className="pb-4 pt-1 px-3 bg-slate-100/70 dark:bg-[#18181B] rounded-2xl mb-3 border border-slate-200/80 dark:border-slate-800 animate-in fade-in duration-150">
+      {/* Expandable Section: Gap added with mt-3 mb-3 */}
+      {isExpanded && !isSelectionMode && (
+        <div className="mt-3 mb-3 pb-4 pt-2.5 px-4 bg-slate-100/70 dark:bg-[#18181B] rounded-2xl border border-slate-200/80 dark:border-slate-800 animate-in fade-in duration-150">
           <div className="flex items-center justify-between py-2 border-b border-slate-200 dark:border-slate-800 mb-2">
             <span className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">
               Список периодов
@@ -242,6 +301,15 @@ export const TaskItem: React.FC<TaskItemProps> = ({
           </div>
         </div>
       )}
+
+      {/* Confirmation Modal for Task Deletion */}
+      <ConfirmModal
+        isOpen={isConfirmDeleteOpen}
+        title="Удалить задачу?"
+        message={`Вы уверены, что хотите удалить задачу «${task.title}» и всю связанную историю интервалов?`}
+        onConfirm={() => onDeleteTask(task.id)}
+        onClose={() => setIsConfirmDeleteOpen(false)}
+      />
     </div>
   );
 };

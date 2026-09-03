@@ -56,6 +56,7 @@ def enrich_task_out(task: Task) -> schemas.TaskOut:
         id=task.id,
         date=task.date,
         title=task.title,
+        category=getattr(task, "category", "work") or "work",
         order_index=task.order_index,
         created_at=ensure_utc(task.created_at),
         updated_at=ensure_utc(task.updated_at),
@@ -102,6 +103,40 @@ def create_task(db: Session, task_in: schemas.TaskCreate) -> schemas.TaskOut:
     if task_in.auto_start:
         pause_all_active_intervals(db)
 
+    cleaned_title = task_in.title.strip()
+    category = task_in.category or "work"
+
+    # If task with the same name already exists for this date, add new interval to it
+    tasks_for_date = db.query(Task).filter(Task.date == task_in.date).all()
+    existing_task = next(
+        (t for t in tasks_for_date if t.title.strip().casefold() == cleaned_title.casefold()),
+        None
+    )
+
+    if existing_task:
+        if task_in.category:
+            existing_task.category = task_in.category
+
+        if task_in.auto_start:
+            # Check if already has an active interval running
+            active_inv = (
+                db.query(TimeInterval)
+                .filter(TimeInterval.task_id == existing_task.id, TimeInterval.end_time.is_(None))
+                .first()
+            )
+            if not active_inv:
+                interval = TimeInterval(
+                    task_id=existing_task.id,
+                    start_time=utc_now(),
+                    end_time=None,
+                )
+                db.add(interval)
+
+        existing_task.updated_at = utc_now()
+        db.commit()
+        db.refresh(existing_task)
+        return enrich_task_out(existing_task)
+
     # Get max order_index for this date
     max_order = (
         db.query(func.max(Task.order_index))
@@ -111,8 +146,9 @@ def create_task(db: Session, task_in: schemas.TaskCreate) -> schemas.TaskOut:
     next_order = (max_order or 0) + 1
 
     task = Task(
-        title=task_in.title.strip(),
+        title=cleaned_title,
         date=task_in.date,
+        category=category,
         order_index=next_order,
     )
     db.add(task)
@@ -140,6 +176,8 @@ def update_task(db: Session, task_id: str, task_in: schemas.TaskUpdate) -> Optio
         task.title = task_in.title.strip()
     if task_in.date is not None:
         task.date = task_in.date
+    if task_in.category is not None:
+        task.category = task_in.category
     if task_in.order_index is not None:
         task.order_index = task_in.order_index
 
@@ -156,6 +194,17 @@ def delete_task(db: Session, task_id: str) -> bool:
     db.delete(task)
     db.commit()
     return True
+
+
+def bulk_delete_tasks(db: Session, task_ids: List[str]) -> int:
+    if not task_ids:
+        return 0
+    tasks = db.query(Task).filter(Task.id.in_(task_ids)).all()
+    count = len(tasks)
+    for t in tasks:
+        db.delete(t)
+    db.commit()
+    return count
 
 
 def start_task_timer(db: Session, task_id: str) -> Optional[schemas.TaskOut]:

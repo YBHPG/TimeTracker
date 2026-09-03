@@ -3,6 +3,7 @@ import { format, parseISO } from 'date-fns';
 import { X, Trash2 } from 'lucide-react';
 import { TimeInterval } from '../types';
 import { Switch } from './Checkbox';
+import { ConfirmModal } from './ConfirmModal';
 
 interface IntervalModalProps {
   isOpen: boolean;
@@ -26,6 +27,7 @@ export const IntervalModal: React.FC<IntervalModalProps> = ({
   const [isRunning, setIsRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false);
 
   useEffect(() => {
     if (interval) {
@@ -87,18 +89,16 @@ export const IntervalModal: React.FC<IntervalModalProps> = ({
     }
   };
 
-  const handleDelete = async () => {
+  const handleConfirmDelete = async () => {
     if (!interval || !onDelete) return;
-    if (window.confirm('Удалить этот интервал?')) {
-      setIsSaving(true);
-      try {
-        await onDelete(interval.id);
-        onClose();
-      } catch (err: any) {
-        setError(err.message || 'Ошибка при удалении');
-      } finally {
-        setIsSaving(false);
-      }
+    setIsSaving(true);
+    try {
+      await onDelete(interval.id);
+      onClose();
+    } catch (err: any) {
+      setError(err.message || 'Ошибка при удалении');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -168,7 +168,7 @@ export const IntervalModal: React.FC<IntervalModalProps> = ({
             {interval && onDelete ? (
               <button
                 type="button"
-                onClick={handleDelete}
+                onClick={() => setIsConfirmDeleteOpen(true)}
                 disabled={isSaving}
                 className="p-2.5 text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-full transition"
                 title="Удалить период"
@@ -197,6 +197,14 @@ export const IntervalModal: React.FC<IntervalModalProps> = ({
           </div>
         </form>
       </div>
+
+      <ConfirmModal
+        isOpen={isConfirmDeleteOpen}
+        title="Удалить период?"
+        message="Вы уверены, что хотите удалить этот временной период?"
+        onConfirm={handleConfirmDelete}
+        onClose={() => setIsConfirmDeleteOpen(false)}
+      />
     </div>
   );
 };

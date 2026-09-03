@@ -34,6 +34,7 @@ class TimeIntervalOut(TimeIntervalBase):
 class TaskBase(BaseModel):
     title: str = Field(..., min_length=1, max_length=255)
     date: str = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}$")
+    category: Optional[str] = "work"
 
 
 class TaskCreate(TaskBase):
@@ -43,6 +44,7 @@ class TaskCreate(TaskBase):
 class TaskUpdate(BaseModel):
     title: Optional[str] = Field(None, min_length=1, max_length=255)
     date: Optional[str] = Field(None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    category: Optional[str] = None
     order_index: Optional[int] = None
 
 
@@ -74,3 +76,7 @@ class DaySummaryOut(BaseModel):
     task_count: int
     has_active_task: bool
     tasks: List[TaskOut]
+
+
+class BulkDeleteTasksPayload(BaseModel):
+    task_ids: List[str]

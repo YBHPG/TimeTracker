@@ -56,6 +56,15 @@ export const api = {
     return handleResponse<void>(res);
   },
 
+  async bulkDeleteTasks(taskIds: string[]): Promise<void> {
+    const res = await fetch(`${API_BASE}/tasks/bulk-delete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ task_ids: taskIds }),
+    });
+    return handleResponse<void>(res);
+  },
+
   async startTimer(taskId: string): Promise<Task> {
     const res = await fetch(`${API_BASE}/tasks/${taskId}/start`, {
       method: 'POST',
