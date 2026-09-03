@@ -58,6 +58,19 @@ export const IntervalModal: React.FC<IntervalModalProps> = ({
     setError(null);
   }, [interval, isOpen]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -103,19 +116,24 @@ export const IntervalModal: React.FC<IntervalModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-150" onClick={onClose}>
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="interval-modal-title"
         className="w-full max-w-sm bg-white dark:bg-[#18181B] rounded-t-3xl sm:rounded-3xl shadow-2xl border border-slate-200/80 dark:border-slate-800 p-6 space-y-4 animate-in slide-in-from-bottom duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+          <h2 id="interval-modal-title" className="text-lg font-semibold text-slate-900 dark:text-white">
             {interval ? 'Редактировать период' : 'Добавить период'}
           </h2>
           <button
+            type="button"
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+            aria-label="Закрыть окно редактирования периода"
+            className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E0533C]"
           >
             <X className="w-5 h-5" />
           </button>
@@ -170,8 +188,9 @@ export const IntervalModal: React.FC<IntervalModalProps> = ({
                 type="button"
                 onClick={() => setIsConfirmDeleteOpen(true)}
                 disabled={isSaving}
-                className="p-2.5 text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-full transition"
+                aria-label="Удалить период"
                 title="Удалить период"
+                className="p-2.5 text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
               >
                 <Trash2 className="w-4 h-4" />
               </button>
@@ -182,14 +201,14 @@ export const IntervalModal: React.FC<IntervalModalProps> = ({
                 type="button"
                 onClick={onClose}
                 disabled={isSaving}
-                className="px-5 py-2.5 text-xs font-medium text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition"
+                className="px-5 py-2.5 text-xs font-medium text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E0533C]"
               >
                 Отмена
               </button>
               <button
                 type="submit"
                 disabled={isSaving}
-                className="px-5 py-2.5 text-xs font-semibold rounded-full bg-slate-900 hover:bg-black dark:bg-white dark:hover:bg-slate-200 text-white dark:text-slate-900 transition shadow-md disabled:opacity-50"
+                className="px-5 py-2.5 text-xs font-semibold rounded-full bg-slate-900 hover:bg-black dark:bg-white dark:hover:bg-slate-200 text-white dark:text-slate-900 transition shadow-md disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E0533C] focus-visible:ring-offset-2"
               >
                 {isSaving ? 'Сохранение...' : 'Сохранить'}
               </button>

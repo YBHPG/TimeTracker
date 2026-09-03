@@ -122,3 +122,19 @@ code, kbd, samp, pre, .font-mono {
 .dark .custom-scrollbar:hover::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.38) !important;
 }
+
+/* Accessibility Focus Rings: high-contrast visible indicator for keyboard navigation */
+:focus-visible {
+  outline: 2px solid #E0533C !important;
+  outline-offset: 2px !important;
+}
+
+/* Support for users with vestibular disorders and motion sensitivity */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

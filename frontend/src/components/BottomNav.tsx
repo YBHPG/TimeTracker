@@ -34,12 +34,15 @@ export const BottomNav: React.FC<BottomNavProps> = ({
 
   return (
     <div className="fixed bottom-[calc(1.5rem+env(safe-area-inset-bottom,0px))] inset-x-0 z-40 flex justify-center px-4 pointer-events-none">
-      <nav className="pointer-events-auto flex items-center gap-1 bg-[#121214] dark:bg-white text-white dark:text-slate-900 p-1.5 rounded-full shadow-2xl border border-slate-800/40 dark:border-slate-200/40 backdrop-blur-lg transition-all duration-300">
+      <nav aria-label="Основная навигация" className="pointer-events-auto flex items-center gap-1 bg-[#121214] dark:bg-white text-white dark:text-slate-900 p-1.5 rounded-full shadow-2xl border border-slate-800/40 dark:border-slate-200/40 backdrop-blur-lg transition-all duration-300">
         {/* Home Tab Button */}
         <button
           type="button"
+          role="tab"
+          aria-selected={activeTab === 'home'}
+          aria-label="Вкладка: Список задач"
           onClick={() => onTabChange('home')}
-          className={`px-5 py-2 rounded-full text-xs font-semibold tracking-wide transition-all ${
+          className={`px-5 py-2 rounded-full text-xs font-semibold tracking-wide transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E0533C] ${
             activeTab === 'home'
               ? 'bg-white text-slate-900 dark:bg-slate-900 dark:text-white shadow-md'
               : 'text-slate-300 dark:text-slate-600 hover:text-white dark:hover:text-black'
@@ -51,8 +54,11 @@ export const BottomNav: React.FC<BottomNavProps> = ({
         {/* Stats / Mypage Tab Button */}
         <button
           type="button"
+          role="tab"
+          aria-selected={activeTab === 'stats'}
+          aria-label="Вкладка: Статистика"
           onClick={() => onTabChange('stats')}
-          className={`px-5 py-2 rounded-full text-xs font-semibold tracking-wide transition-all ${
+          className={`px-5 py-2 rounded-full text-xs font-semibold tracking-wide transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E0533C] ${
             activeTab === 'stats'
               ? 'bg-white text-slate-900 dark:bg-slate-900 dark:text-white shadow-md'
               : 'text-slate-300 dark:text-slate-600 hover:text-white dark:hover:text-black'
@@ -68,8 +74,9 @@ export const BottomNav: React.FC<BottomNavProps> = ({
         <button
           type="button"
           onClick={onOpenCalendar}
+          aria-label="Открыть календарь"
           title="Открыть календарь"
-          className="p-2 text-slate-300 dark:text-slate-600 hover:text-white dark:hover:text-black rounded-full hover:bg-white/10 dark:hover:bg-slate-900/10 transition"
+          className="p-2 text-slate-300 dark:text-slate-600 hover:text-white dark:hover:text-black rounded-full hover:bg-white/10 dark:hover:bg-slate-900/10 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E0533C]"
         >
           <CalendarIcon className="w-4 h-4" />
         </button>
@@ -78,8 +85,9 @@ export const BottomNav: React.FC<BottomNavProps> = ({
         <button
           type="button"
           onClick={toggleTheme}
+          aria-label={getThemeTitle()}
           title={getThemeTitle()}
-          className="p-2 text-slate-300 dark:text-slate-600 hover:text-white dark:hover:text-black rounded-full hover:bg-white/10 dark:hover:bg-slate-900/10 transition flex items-center justify-center"
+          className="p-2 text-slate-300 dark:text-slate-600 hover:text-white dark:hover:text-black rounded-full hover:bg-white/10 dark:hover:bg-slate-900/10 transition flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E0533C]"
         >
           {theme === 'system' ? (
             <Laptop className="w-4 h-4 text-sky-400 dark:text-sky-600" />
@@ -94,8 +102,9 @@ export const BottomNav: React.FC<BottomNavProps> = ({
         <a
           href={api.getExportCsvUrl(selectedDate, selectedDate)}
           download={`tasks_${selectedDate}.csv`}
+          aria-label="Экспорт задач за день в CSV"
           title="Экспорт в CSV"
-          className="p-2 text-slate-300 dark:text-slate-600 hover:text-white dark:hover:text-black rounded-full hover:bg-white/10 dark:hover:bg-slate-900/10 transition"
+          className="p-2 text-slate-300 dark:text-slate-600 hover:text-white dark:hover:text-black rounded-full hover:bg-white/10 dark:hover:bg-slate-900/10 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E0533C]"
         >
           <Download className="w-4 h-4" />
         </a>

@@ -115,6 +115,24 @@ export const TaskItem: React.FC<TaskItemProps> = ({
     >
       {/* Main Row Matching Design */}
       <div
+        role="button"
+        tabIndex={0}
+        aria-expanded={!isSelectionMode ? isExpanded : undefined}
+        aria-label={
+          isSelectionMode
+            ? `${isSelected ? 'Снять выбор с задачи' : 'Выбрать задачу'}: ${task.title}`
+            : `Задача: ${task.title}. ${isExpanded ? 'Свернуть детали' : 'Развернуть детали'}`
+        }
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            if (isSelectionMode) {
+              if (onToggleSelect) onToggleSelect(task.id);
+            } else {
+              setIsExpanded(!isExpanded);
+            }
+          }
+        }}
         onClick={() => {
           if (isSelectionMode) {
             if (onToggleSelect) onToggleSelect(task.id);
@@ -122,7 +140,7 @@ export const TaskItem: React.FC<TaskItemProps> = ({
             setIsExpanded(!isExpanded);
           }
         }}
-        className="group py-3 px-3 flex items-start justify-between gap-3.5 cursor-pointer hover:bg-slate-100/60 dark:hover:bg-slate-800/40 rounded-2xl transition-colors"
+        className="group py-3 px-3 flex items-start justify-between gap-3.5 cursor-pointer hover:bg-slate-100/60 dark:hover:bg-slate-800/40 rounded-2xl transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E0533C]"
       >
         {/* Selection Checkbox */}
         {isSelectionMode && (
@@ -235,8 +253,9 @@ export const TaskItem: React.FC<TaskItemProps> = ({
               type="button"
               onClick={handleToggleTimer}
               disabled={isUpdating}
+              aria-label={isRunning ? `Поставить на паузу: ${task.title}` : `Запустить таймер: ${task.title}`}
               title={isRunning ? 'Поставить на паузу' : 'Запустить таймер'}
-              className={`w-11 h-11 rounded-2xl flex items-center justify-center transition-all duration-200 ${
+              className={`w-11 h-11 rounded-2xl flex items-center justify-center transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E0533C] ${
                 isRunning
                   ? 'bg-[#E0533C] hover:bg-[#c94530] text-white shadow-lg shadow-[#E0533C]/30 scale-105 ring-2 ring-[#E0533C]/40'
                   : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
@@ -262,7 +281,8 @@ export const TaskItem: React.FC<TaskItemProps> = ({
             <button
               type="button"
               onClick={() => onOpenAddInterval(task)}
-              className="flex items-center gap-1 text-xs font-semibold text-slate-900 dark:text-white hover:text-[#E0533C] dark:hover:text-[#ff745e] px-2 py-0.5 rounded-lg transition"
+              aria-label={`Добавить период для задачи ${task.title}`}
+              className="flex items-center gap-1 text-xs font-semibold text-slate-900 dark:text-white hover:text-[#E0533C] dark:hover:text-[#ff745e] px-2 py-0.5 rounded-lg transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E0533C]"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>Добавить период</span>
@@ -274,7 +294,7 @@ export const TaskItem: React.FC<TaskItemProps> = ({
               Нет записанных периодов. Нажмите кнопку справа, чтобы начать.
             </p>
           ) : (
-            <ul className="space-y-1">
+            <ul className="space-y-1" aria-label={`Периоды задачи ${task.title}`}>
               {task.intervals.map((inv) => (
                 <IntervalItem
                   key={inv.id}
@@ -293,7 +313,8 @@ export const TaskItem: React.FC<TaskItemProps> = ({
             <button
               type="button"
               onClick={handleDelete}
-              className="flex items-center gap-1 text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 transition px-2 py-1 rounded-lg"
+              aria-label={`Удалить карточку задачи ${task.title}`}
+              className="flex items-center gap-1 text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 transition px-2 py-1 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
             >
               <Trash2 className="w-3.5 h-3.5" />
               <span>Удалить карточку</span>

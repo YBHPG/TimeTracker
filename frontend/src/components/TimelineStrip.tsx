@@ -126,8 +126,11 @@ export const TimelineStrip: React.FC<TimelineStripProps> = ({
             }
 
             return (
-              <div
+              <button
+                type="button"
                 key={b.id}
+                tabIndex={0}
+                aria-label={`Период задачи: ${b.taskTitle}, ${b.isRunning ? 'идет сейчас' : 'завершен'}`}
                 onMouseEnter={() => {
                   setHoveredBlock(b);
                   if (onHoverTask) onHoverTask(b.taskId);
@@ -136,12 +139,26 @@ export const TimelineStrip: React.FC<TimelineStripProps> = ({
                   setHoveredBlock(null);
                   if (onHoverTask) onHoverTask(null);
                 }}
+                onFocus={() => {
+                  setHoveredBlock(b);
+                  if (onHoverTask) onHoverTask(b.taskId);
+                }}
+                onBlur={() => {
+                  setHoveredBlock(null);
+                  if (onHoverTask) onHoverTask(null);
+                }}
                 onClick={() => onSelectTask && onSelectTask(b.taskId)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onSelectTask && onSelectTask(b.taskId);
+                  }
+                }}
                 style={{
                   left: `${b.leftPct}%`,
                   width: `${b.widthPct}%`,
                 }}
-                className={`absolute top-0 bottom-0 cursor-pointer transition-all duration-150 ${colorClasses} ${
+                className={`absolute top-0 bottom-0 cursor-pointer transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:z-30 ${colorClasses} ${
                   isOtherTask ? 'opacity-25' : 'opacity-100'
                 }`}
               />

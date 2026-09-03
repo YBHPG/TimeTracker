@@ -20,9 +20,10 @@ export const Checkbox: React.FC<CheckboxProps> = ({
         type="button"
         role="checkbox"
         aria-checked={checked}
+        aria-label={typeof label === 'string' ? label : 'Выбрать'}
         disabled={disabled}
         onClick={() => onChange(!checked)}
-        className={`w-5 h-5 rounded-lg border transition-all duration-200 flex items-center justify-center ${
+        className={`w-5 h-5 rounded-lg border transition-all duration-200 flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E0533C] focus-visible:ring-offset-2 ${
           checked
             ? 'bg-slate-900 border-slate-900 text-white dark:bg-white dark:border-white dark:text-slate-900 shadow-sm'
             : 'border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:border-slate-400 dark:hover:border-slate-600'
@@ -55,9 +56,10 @@ export const Switch: React.FC<CheckboxProps> = ({
         type="button"
         role="switch"
         aria-checked={checked}
+        aria-label={typeof label === 'string' ? label : 'Переключатель'}
         disabled={disabled}
         onClick={() => onChange(!checked)}
-        className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+        className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E0533C] focus-visible:ring-offset-2 ${
           checked ? 'bg-slate-900 dark:bg-white' : 'bg-slate-200 dark:bg-slate-700'
         }`}
       >

@@ -58,16 +58,18 @@ export const IntervalItem: React.FC<IntervalItemProps> = ({
         <button
           type="button"
           onClick={() => onEdit(interval)}
+          aria-label="Редактировать интервал"
           title="Редактировать интервал"
-          className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded hover:bg-slate-200 dark:hover:bg-slate-700 transition"
+          className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded hover:bg-slate-200 dark:hover:bg-slate-700 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E0533C]"
         >
           <Edit2 className="w-3.5 h-3.5" />
         </button>
         <button
           type="button"
           onClick={() => onDelete(interval.id)}
+          aria-label="Удалить интервал"
           title="Удалить интервал"
-          className="p-1 text-slate-400 hover:text-rose-500 rounded hover:bg-rose-50 dark:hover:bg-rose-950/50 transition"
+          className="p-1 text-slate-400 hover:text-rose-500 rounded hover:bg-rose-50 dark:hover:bg-rose-950/50 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
         >
           <Trash2 className="w-3.5 h-3.5" />
         </button>

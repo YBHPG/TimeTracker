@@ -395,8 +395,9 @@ export const App: React.FC = () => {
                     <button
                       type="button"
                       onClick={handlePrevDay}
+                      aria-label="Предыдущий день"
                       title="Предыдущий день"
-                      className="p-1.5 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                      className="p-1.5 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E0533C]"
                     >
                       <ChevronLeft className="w-5 h-5" />
                     </button>
@@ -404,8 +405,9 @@ export const App: React.FC = () => {
                     <button
                       type="button"
                       onClick={handleNextDay}
+                      aria-label="Следующий день"
                       title="Следующий день"
-                      className="p-1.5 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                      className="p-1.5 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E0533C]"
                     >
                       <ChevronRight className="w-5 h-5" />
                     </button>
@@ -413,8 +415,9 @@ export const App: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setIsCalendarOpen(true)}
+                      aria-label="Открыть календарь"
                       title="Открыть календарь"
-                      className="p-1.5 ml-1 rounded-full text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                      className="p-1.5 ml-1 rounded-full text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E0533C]"
                     >
                       <CalendarIcon className="w-4 h-4" />
                     </button>
@@ -484,14 +487,18 @@ export const App: React.FC = () => {
                 {/* Quick Date Shortcuts */}
                 <div className="pt-2 flex items-center gap-2 border-t border-slate-200/60 dark:border-slate-800/60">
                   <button
+                    type="button"
                     onClick={() => setSelectedDate(format(subDays(new Date(), 1), 'yyyy-MM-dd'))}
-                    className="px-3 py-1 text-xs rounded-full bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 transition"
+                    aria-label="Перейти ко вчерашнему дню"
+                    className="px-3 py-1 text-xs rounded-full bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E0533C]"
                   >
                     Вчера
                   </button>
                   <button
+                    type="button"
                     onClick={() => setSelectedDate(getTodayDateStr())}
-                    className={`px-3 py-1 text-xs rounded-full font-medium transition ${
+                    aria-label="Перейти к сегодняшнему дню"
+                    className={`px-3 py-1 text-xs rounded-full font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E0533C] ${
                       isTodaySelected
                         ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
                         : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
@@ -500,8 +507,10 @@ export const App: React.FC = () => {
                     Сегодня
                   </button>
                   <button
+                    type="button"
                     onClick={() => setIsCalendarOpen(true)}
-                    className="px-3 py-1 text-xs rounded-full bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 transition ml-auto"
+                    aria-label="Открыть календарь"
+                    className="px-3 py-1 text-xs rounded-full bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 transition ml-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E0533C]"
                   >
                     Календарь
                   </button>
@@ -538,7 +547,8 @@ export const App: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => setIsBulkDeleteModalOpen(true)}
-                            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold shadow-sm transition"
+                            aria-label={`Удалить выбранные задачи (${selectedTaskIds.size})`}
+                            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                             <span>Удалить ({selectedTaskIds.size})</span>
@@ -550,7 +560,8 @@ export const App: React.FC = () => {
                             setIsSelectionMode(false);
                             setSelectedTaskIds(new Set());
                           }}
-                          className="px-3 py-1.5 rounded-full text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                          aria-label="Отменить режим выбора"
+                          className="px-3 py-1.5 rounded-full text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E0533C]"
                         >
                           Отмена
                         </button>
@@ -572,8 +583,9 @@ export const App: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => setIsSelectionMode(true)}
+                            aria-label="Выбрать несколько задач"
                             title="Выбрать несколько задач"
-                            className="p-1.5 text-slate-600 dark:text-slate-300 hover:text-black dark:hover:text-white rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                            className="p-1.5 text-slate-600 dark:text-slate-300 hover:text-black dark:hover:text-white rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E0533C]"
                           >
                             <ListChecks className="w-5 h-5 stroke-[2]" />
                           </button>
@@ -581,8 +593,9 @@ export const App: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => setIsNewTaskOpen(true)}
+                          aria-label="Добавить новую задачу"
                           title="Добавить новую задачу"
-                          className="p-1.5 text-slate-700 dark:text-slate-200 hover:text-black dark:hover:text-white rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                          className="p-1.5 text-slate-700 dark:text-slate-200 hover:text-black dark:hover:text-white rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E0533C]"
                         >
                           <Plus className="w-6 h-6 stroke-[2.5]" />
                         </button>
@@ -599,8 +612,9 @@ export const App: React.FC = () => {
                       type="text"
                       value={quickTitle}
                       onChange={(e) => setQuickTitle(e.target.value)}
+                      aria-label="Название новой задачи"
                       placeholder="Быстро добавить задачу..."
-                      className="flex-1 px-3 py-1.5 bg-transparent text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none"
+                      className="flex-1 px-3 py-1.5 bg-transparent text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E0533C] rounded-xl"
                     />
                     <CategoryDropdown
                       value={quickCategory}
@@ -617,7 +631,8 @@ export const App: React.FC = () => {
                     <button
                       type="submit"
                       disabled={!quickTitle.trim()}
-                      className="h-8 px-4 inline-flex items-center justify-center min-w-[76px] rounded-full bg-slate-900 hover:bg-black dark:bg-white dark:hover:bg-slate-200 text-white dark:text-slate-900 text-xs font-semibold tracking-wide transition disabled:opacity-40 shadow-xs flex-shrink-0"
+                      aria-label={quickAutoStart ? 'Начать задачу' : 'Создать задачу'}
+                      className="h-8 px-4 inline-flex items-center justify-center min-w-[76px] rounded-full bg-slate-900 hover:bg-black dark:bg-white dark:hover:bg-slate-200 text-white dark:text-slate-900 text-xs font-semibold tracking-wide transition disabled:opacity-40 shadow-xs flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E0533C]"
                     >
                       <span
                         key={quickAutoStart ? 'start' : 'create'}
