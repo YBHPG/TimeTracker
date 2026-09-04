@@ -11,7 +11,7 @@ class TimeIntervalBase(BaseModel):
 
 
 class TimeIntervalCreate(TimeIntervalBase):
-    pass
+    id: Optional[str] = None
 
 
 class TimeIntervalUpdate(BaseModel):
@@ -38,7 +38,14 @@ class TaskBase(BaseModel):
 
 
 class TaskCreate(TaskBase):
+    id: Optional[str] = None
     auto_start: bool = True
+    at: Optional[datetime] = None
+
+
+class TimerActionPayload(BaseModel):
+    at: Optional[datetime] = None
+    interval_id: Optional[str] = None
 
 
 class TaskUpdate(BaseModel):

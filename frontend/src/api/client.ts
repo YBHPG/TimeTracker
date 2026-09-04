@@ -1,4 +1,4 @@
-import { Task, DayStatItem, DaySummary, CreateTaskPayload, UpdateTaskPayload, CreateIntervalPayload, UpdateIntervalPayload, TimeInterval } from '../types';
+import { Task, DayStatItem, DaySummary, CreateTaskPayload, UpdateTaskPayload, CreateIntervalPayload, UpdateIntervalPayload, TimeInterval, TimerActionPayload } from '../types';
 
 const API_BASE = '/api';
 
@@ -65,16 +65,20 @@ export const api = {
     return handleResponse<void>(res);
   },
 
-  async startTimer(taskId: string): Promise<Task> {
+  async startTimer(taskId: string, payload?: TimerActionPayload): Promise<Task> {
     const res = await fetch(`${API_BASE}/tasks/${taskId}/start`, {
       method: 'POST',
+      headers: payload ? { 'Content-Type': 'application/json' } : undefined,
+      body: payload ? JSON.stringify(payload) : undefined,
     });
     return handleResponse<Task>(res);
   },
 
-  async pauseTimer(taskId: string): Promise<Task> {
+  async pauseTimer(taskId: string, payload?: TimerActionPayload): Promise<Task> {
     const res = await fetch(`${API_BASE}/tasks/${taskId}/pause`, {
       method: 'POST',
+      headers: payload ? { 'Content-Type': 'application/json' } : undefined,
+      body: payload ? JSON.stringify(payload) : undefined,
     });
     return handleResponse<Task>(res);
   },

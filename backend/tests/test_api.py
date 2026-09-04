@@ -254,3 +254,79 @@ def test_bulk_delete_tasks(client):
     assert len(remaining) == 1
     assert remaining[0]["id"] == id2
 
+
+def test_offline_sync_timestamps_and_client_ids(client):
+    # 1. Create task with client-generated UUID and specific start time
+    custom_task_id = "client-task-uuid-12345"
+    t_start = "2026-09-04T10:00:00Z"
+    t_pause1 = "2026-09-04T10:20:00Z"
+
+    res = client.post("/api/tasks", json={
+        "id": custom_task_id,
+        "title": "Офлайн задача 1",
+        "date": "2026-09-04",
+        "category": "work",
+        "auto_start": True,
+        "at": t_start
+    })
+    assert res.status_code == 201
+    data = res.json()
+    assert data["id"] == custom_task_id
+    assert data["is_active"] is True
+    assert len(data["intervals"]) == 1
+    assert data["intervals"][0]["start_time"].startswith("2026-09-04T10:00:00")
+
+    # 2. Pause task with specific offline timestamp
+    pause_res = client.post(f"/api/tasks/{custom_task_id}/pause", json={"at": t_pause1})
+    assert pause_res.status_code == 200
+    p_data = pause_res.json()
+    assert p_data["is_active"] is False
+    assert p_data["intervals"][0]["duration_seconds"] == 1200
+    assert p_data["total_duration_seconds"] == 1200
+
+    # 3. Create second task with client UUID and start with custom interval ID and timestamp
+    custom_task_id2 = "client-task-uuid-67890"
+    custom_inv_id2 = "client-inv-uuid-abcde"
+    t_start2 = "2026-09-04T10:20:00Z"
+    t_pause2 = "2026-09-04T10:50:00Z"
+
+    res2 = client.post("/api/tasks", json={
+        "id": custom_task_id2,
+        "title": "Офлайн задача 2",
+        "date": "2026-09-04",
+        "category": "study",
+        "auto_start": False,
+    })
+    assert res2.status_code == 201
+    assert res2.json()["id"] == custom_task_id2
+
+    # Start with custom interval ID and timestamp
+    start_res = client.post(f"/api/tasks/{custom_task_id2}/start", json={
+        "at": t_start2,
+        "interval_id": custom_inv_id2
+    })
+    assert start_res.status_code == 200
+    s_data = start_res.json()
+    assert s_data["is_active"] is True
+    assert s_data["intervals"][0]["id"] == custom_inv_id2
+    assert s_data["intervals"][0]["start_time"].startswith("2026-09-04T10:20:00")
+
+    # Pause second task
+    pause_res2 = client.post(f"/api/tasks/{custom_task_id2}/pause", json={"at": t_pause2})
+    assert pause_res2.status_code == 200
+    p2_data = pause_res2.json()
+    assert p2_data["is_active"] is False
+    assert p2_data["intervals"][0]["duration_seconds"] == 1800  # 30 min
+
+    # 4. Add interval with client UUID
+    custom_manual_inv_id = "client-manual-inv-111"
+    inv_res = client.post(f"/api/tasks/{custom_task_id2}/intervals", json={
+        "id": custom_manual_inv_id,
+        "start_time": "2026-09-04T11:00:00Z",
+        "end_time": "2026-09-04T11:15:00Z"
+    })
+    assert inv_res.status_code == 201
+    assert inv_res.json()["id"] == custom_manual_inv_id
+    assert inv_res.json()["duration_seconds"] == 900
+
+

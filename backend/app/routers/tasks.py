@@ -77,10 +77,13 @@ def bulk_delete_tasks(
 @router.post("/tasks/{task_id}/start", response_model=schemas.TaskOut)
 def start_timer(
     task_id: str,
+    payload: Optional[schemas.TimerActionPayload] = None,
     db: Session = Depends(get_db),
 ):
     """Start or resume timer on this task. Pauses any other active timer."""
-    task = crud.start_task_timer(db, task_id)
+    at = payload.at if payload else None
+    interval_id = payload.interval_id if payload else None
+    task = crud.start_task_timer(db, task_id, at=at, interval_id=interval_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     return task
@@ -89,10 +92,12 @@ def start_timer(
 @router.post("/tasks/{task_id}/pause", response_model=schemas.TaskOut)
 def pause_timer(
     task_id: str,
+    payload: Optional[schemas.TimerActionPayload] = None,
     db: Session = Depends(get_db),
 ):
     """Pause timer on this task."""
-    task = crud.pause_task_timer(db, task_id)
+    at = payload.at if payload else None
+    task = crud.pause_task_timer(db, task_id, at=at)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     return task

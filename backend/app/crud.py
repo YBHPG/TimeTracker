@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from app.models import Task, TimeInterval, utc_now
+from app.models import Task, TimeInterval, utc_now, generate_uuid
 from app import schemas
 
 
@@ -67,9 +67,9 @@ def enrich_task_out(task: Task) -> schemas.TaskOut:
     )
 
 
-def pause_all_active_intervals(db: Session, except_task_id: Optional[str] = None) -> int:
+def pause_all_active_intervals(db: Session, except_task_id: Optional[str] = None, at: Optional[datetime] = None) -> int:
     """Pauses all currently active intervals across all tasks (except optionally for a specific task)."""
-    now = utc_now()
+    now = at or utc_now()
     query = db.query(TimeInterval).filter(TimeInterval.end_time.is_(None))
     if except_task_id:
         query = query.filter(TimeInterval.task_id != except_task_id)
@@ -99,9 +99,11 @@ def get_tasks_by_date(db: Session, date_str: str) -> List[schemas.TaskOut]:
 
 
 def create_task(db: Session, task_in: schemas.TaskCreate) -> schemas.TaskOut:
+    create_dt = task_in.at or utc_now()
+
     # If auto_start is true, pause any other active timers first
     if task_in.auto_start:
-        pause_all_active_intervals(db)
+        pause_all_active_intervals(db, at=create_dt)
 
     cleaned_title = task_in.title.strip()
     category = task_in.category or "work"
@@ -127,12 +129,12 @@ def create_task(db: Session, task_in: schemas.TaskCreate) -> schemas.TaskOut:
             if not active_inv:
                 interval = TimeInterval(
                     task_id=existing_task.id,
-                    start_time=utc_now(),
+                    start_time=create_dt,
                     end_time=None,
                 )
                 db.add(interval)
 
-        existing_task.updated_at = utc_now()
+        existing_task.updated_at = create_dt
         db.commit()
         db.refresh(existing_task)
         return enrich_task_out(existing_task)
@@ -146,10 +148,13 @@ def create_task(db: Session, task_in: schemas.TaskCreate) -> schemas.TaskOut:
     next_order = (max_order or 0) + 1
 
     task = Task(
+        id=task_in.id or generate_uuid(),
         title=cleaned_title,
         date=task_in.date,
         category=category,
         order_index=next_order,
+        created_at=create_dt,
+        updated_at=create_dt,
     )
     db.add(task)
     db.flush()
@@ -157,7 +162,7 @@ def create_task(db: Session, task_in: schemas.TaskCreate) -> schemas.TaskOut:
     if task_in.auto_start:
         interval = TimeInterval(
             task_id=task.id,
-            start_time=utc_now(),
+            start_time=create_dt,
             end_time=None,
         )
         db.add(interval)
@@ -207,10 +212,12 @@ def bulk_delete_tasks(db: Session, task_ids: List[str]) -> int:
     return count
 
 
-def start_task_timer(db: Session, task_id: str) -> Optional[schemas.TaskOut]:
+def start_task_timer(db: Session, task_id: str, at: Optional[datetime] = None, interval_id: Optional[str] = None) -> Optional[schemas.TaskOut]:
     task = get_task(db, task_id)
     if not task:
         return None
+
+    start_dt = at or utc_now()
 
     # Check if already active
     active_inv = (
@@ -220,41 +227,42 @@ def start_task_timer(db: Session, task_id: str) -> Optional[schemas.TaskOut]:
     )
     if active_inv:
         # Already running, but ensure other tasks are paused
-        pause_all_active_intervals(db, except_task_id=task_id)
+        pause_all_active_intervals(db, except_task_id=task_id, at=start_dt)
         return enrich_task_out(task)
 
     # Pause any other active timer
-    pause_all_active_intervals(db)
+    pause_all_active_intervals(db, at=start_dt)
 
     # Start new interval
     new_inv = TimeInterval(
+        id=interval_id or generate_uuid(),
         task_id=task.id,
-        start_time=utc_now(),
+        start_time=start_dt,
         end_time=None,
     )
     db.add(new_inv)
-    task.updated_at = utc_now()
+    task.updated_at = start_dt
     db.commit()
     db.refresh(task)
     return enrich_task_out(task)
 
 
-def pause_task_timer(db: Session, task_id: str) -> Optional[schemas.TaskOut]:
+def pause_task_timer(db: Session, task_id: str, at: Optional[datetime] = None) -> Optional[schemas.TaskOut]:
     task = get_task(db, task_id)
     if not task:
         return None
 
-    now = utc_now()
+    pause_dt = at or utc_now()
     active_intervals = (
         db.query(TimeInterval)
         .filter(TimeInterval.task_id == task_id, TimeInterval.end_time.is_(None))
         .all()
     )
     for inv in active_intervals:
-        inv.end_time = now
-        inv.updated_at = now
+        inv.end_time = pause_dt
+        inv.updated_at = pause_dt
 
-    task.updated_at = now
+    task.updated_at = pause_dt
     db.commit()
     db.refresh(task)
     return enrich_task_out(task)
@@ -266,9 +274,10 @@ def add_interval(db: Session, task_id: str, interval_in: schemas.TimeIntervalCre
         return None
 
     if interval_in.end_time is None:
-        pause_all_active_intervals(db)
+        pause_all_active_intervals(db, at=interval_in.start_time)
 
     inv = TimeInterval(
+        id=interval_in.id or generate_uuid(),
         task_id=task_id,
         start_time=interval_in.start_time,
         end_time=interval_in.end_time,

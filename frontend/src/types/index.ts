@@ -81,10 +81,12 @@ export interface DaySummary {
 }
 
 export interface CreateTaskPayload {
+  id?: string;
   title: string;
   date: string;
   category?: TaskCategory | string;
   auto_start?: boolean;
+  at?: string;
 }
 
 export interface UpdateTaskPayload {
@@ -95,6 +97,7 @@ export interface UpdateTaskPayload {
 }
 
 export interface CreateIntervalPayload {
+  id?: string;
   start_time: string;
   end_time?: string | null;
 }
@@ -102,4 +105,9 @@ export interface CreateIntervalPayload {
 export interface UpdateIntervalPayload {
   start_time?: string;
   end_time?: string | null;
+}
+
+export interface TimerActionPayload {
+  at?: string;
+  interval_id?: string;
 }

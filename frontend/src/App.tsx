@@ -22,16 +22,76 @@ import {
   formatDurationHuman,
   formatDatePretty,
 } from './utils/formatters';
-import { ChevronRight, Plus, AlertCircle, ChevronLeft, Calendar as CalendarIcon, ListChecks, Trash2 } from 'lucide-react';
+import {
+  getCachedTasks,
+  setCachedTasks,
+  getCachedDaysStats,
+  setCachedDaysStats,
+  enqueueAction,
+  subscribeSyncState,
+  onQueueDrained,
+  generateClientUUID,
+  SyncState,
+} from './utils/syncManager';
+import {
+  ChevronRight,
+  Plus,
+  AlertCircle,
+  ChevronLeft,
+  Calendar as CalendarIcon,
+  ListChecks,
+  Trash2,
+  WifiOff,
+  RefreshCw,
+  Check,
+} from 'lucide-react';
 import { format, addDays, subDays, parseISO } from 'date-fns';
+
+function pauseTaskLocally(task: Task, isoTime: string): Task {
+  let totalSec = 0;
+  const updatedIntervals = task.intervals.map((inv) => {
+    if (inv.end_time === null) {
+      const startMs = new Date(inv.start_time).getTime();
+      const endMs = new Date(isoTime).getTime();
+      const dur = Math.max(0, Math.floor((endMs - startMs) / 1000));
+      totalSec += dur;
+      return {
+        ...inv,
+        end_time: isoTime,
+        duration_seconds: dur,
+        updated_at: isoTime,
+      };
+    }
+    totalSec += inv.duration_seconds;
+    return inv;
+  });
+
+  return {
+    ...task,
+    is_active: false,
+    active_interval_id: null,
+    intervals: updatedIntervals,
+    total_duration_seconds: totalSec,
+    updated_at: isoTime,
+  };
+}
 
 export const App: React.FC = () => {
   const { theme, setTheme } = useTheme();
   const [selectedDate, setSelectedDate] = useState<string>(getTodayDateStr());
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [daysStats, setDaysStats] = useState<DayStatItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [tasks, setTasks] = useState<Task[]>(() => getCachedTasks(getTodayDateStr()) || []);
+  const [daysStats, setDaysStats] = useState<DayStatItem[]>(() => getCachedDaysStats() || []);
+  const [isLoading, setIsLoading] = useState(() => !(getCachedTasks(getTodayDateStr())?.length));
   const [error, setError] = useState<string | null>(null);
+
+  // Sync state for offline support
+  const [syncState, setSyncState] = useState<SyncState>({
+    isOnline: typeof navigator !== 'undefined' ? navigator.onLine : true,
+    isSyncing: false,
+    pendingCount: 0,
+    lastSyncedAt: null,
+  });
+  const [showJustSynced, setShowJustSynced] = useState(false);
 
   // Active view tab: 'home' | 'stats'
   const [activeTab, setActiveTab] = useState<'home' | 'stats'>('home');
@@ -139,30 +199,65 @@ export const App: React.FC = () => {
     }
   }, [activeTask, tick]);
 
-  // Fetch tasks for the selected date
+  // Subscribe to sync manager events
+  useEffect(() => {
+    const unsubscribe = subscribeSyncState(setSyncState);
+    return unsubscribe;
+  }, []);
+
+  // Fetch tasks for the selected date (cache-first for instant offline responsiveness)
   const loadTasks = useCallback(async (dateStr: string) => {
+    const cached = getCachedTasks(dateStr);
+    if (cached) {
+      setTasks(cached);
+    }
+
     try {
-      setError(null);
       const data = await api.getTasks(dateStr);
       setTasks(data);
+      setCachedTasks(dateStr, data);
+      setError(null);
     } catch (err: any) {
-      setError(err.message || 'Не удалось загрузить задачи');
+      if (!cached && navigator.onLine) {
+        setError(err.message || 'Не удалось загрузить задачи');
+      }
     }
   }, []);
 
   // Fetch all recorded days for calendar indicators
   const loadDaysStats = useCallback(async () => {
+    const cached = getCachedDaysStats();
+    if (cached) {
+      setDaysStats(cached);
+    }
+
     try {
       const stats = await api.getDaysStats();
       setDaysStats(stats);
+      setCachedDaysStats(stats);
     } catch {
       // Non-critical
     }
   }, []);
 
+  // Re-fetch when sync queue is drained
+  useEffect(() => {
+    const unsubscribe = onQueueDrained(() => {
+      setShowJustSynced(true);
+      const timer = setTimeout(() => setShowJustSynced(false), 2500);
+      loadTasks(selectedDate);
+      loadDaysStats();
+      return () => clearTimeout(timer);
+    });
+    return unsubscribe;
+  }, [selectedDate, loadTasks, loadDaysStats]);
+
   // Initial load and date change load
   useEffect(() => {
-    setIsLoading(true);
+    const cached = getCachedTasks(selectedDate);
+    if (!cached || cached.length === 0) {
+      setIsLoading(true);
+    }
     Promise.all([loadTasks(selectedDate), loadDaysStats()]).finally(() => {
       setIsLoading(false);
     });
@@ -212,19 +307,115 @@ export const App: React.FC = () => {
     setSelectedDate(format(d, 'yyyy-MM-dd'));
   };
 
-  // Handlers
+  // Handlers - Optimistic local updates with offline sync queue
   const handleAddTask = async (title: string, autoStart: boolean, category: TaskCategory = 'work') => {
-    try {
-      setError(null);
-      await api.createTask({
-        title,
+    const trimmed = title.trim();
+    if (!trimmed) return;
+
+    setError(null);
+    const isoNow = new Date().toISOString();
+    const existingTask = tasks.find(
+      (t) => t.title.trim().toLowerCase() === trimmed.toLowerCase()
+    );
+
+    if (existingTask) {
+      let updatedTasks = [...tasks];
+      if (autoStart) {
+        const newIntervalId = generateClientUUID();
+        updatedTasks = updatedTasks.map((t) => {
+          if (t.id === existingTask.id) {
+            const newInv: TimeInterval = {
+              id: newIntervalId,
+              task_id: t.id,
+              start_time: isoNow,
+              end_time: null,
+              duration_seconds: 0,
+              created_at: isoNow,
+              updated_at: isoNow,
+            };
+            return {
+              ...t,
+              category,
+              is_active: true,
+              active_interval_id: newIntervalId,
+              intervals: [...t.intervals, newInv],
+              updated_at: isoNow,
+            };
+          } else if (t.is_active) {
+            return pauseTaskLocally(t, isoNow);
+          }
+          return t;
+        });
+      } else {
+        updatedTasks = updatedTasks.map((t) =>
+          t.id === existingTask.id ? { ...t, category, updated_at: isoNow } : t
+        );
+      }
+
+      setTasks(updatedTasks);
+      setCachedTasks(selectedDate, updatedTasks);
+
+      enqueueAction({
+        type: 'CREATE_TASK',
+        payload: {
+          id: existingTask.id,
+          title: trimmed,
+          date: selectedDate,
+          category,
+          auto_start: autoStart,
+          at: isoNow,
+        },
+      });
+    } else {
+      const newTaskId = generateClientUUID();
+      const newIntervalId = generateClientUUID();
+      const newInterval: TimeInterval | null = autoStart
+        ? {
+            id: newIntervalId,
+            task_id: newTaskId,
+            start_time: isoNow,
+            end_time: null,
+            duration_seconds: 0,
+            created_at: isoNow,
+            updated_at: isoNow,
+          }
+        : null;
+
+      let updatedTasks = autoStart
+        ? tasks.map((t) => (t.is_active ? pauseTaskLocally(t, isoNow) : t))
+        : [...tasks];
+
+      const maxOrder = updatedTasks.reduce((max, t) => Math.max(max, t.order_index || 0), 0);
+
+      const newTask: Task = {
+        id: newTaskId,
+        title: trimmed,
         date: selectedDate,
         category,
-        auto_start: autoStart,
+        order_index: maxOrder + 1,
+        intervals: newInterval ? [newInterval] : [],
+        is_active: autoStart,
+        total_duration_seconds: 0,
+        active_interval_id: newInterval ? newInterval.id : null,
+        created_at: isoNow,
+        updated_at: isoNow,
+      };
+
+      updatedTasks = [...updatedTasks, newTask];
+      setTasks(updatedTasks);
+      setCachedTasks(selectedDate, updatedTasks);
+
+      enqueueAction({
+        type: 'CREATE_TASK',
+        payload: {
+          id: newTaskId,
+          title: trimmed,
+          date: selectedDate,
+          category,
+          auto_start: autoStart,
+          at: isoNow,
+        },
       });
-      await Promise.all([loadTasks(selectedDate), loadDaysStats()]);
-    } catch (err: any) {
-      setError(err.message || 'Ошибка создания задачи');
     }
   };
 
@@ -237,48 +428,98 @@ export const App: React.FC = () => {
   };
 
   const handleUpdateCategory = async (taskId: string, newCategory: TaskCategory) => {
-    try {
-      await api.updateTask(taskId, { category: newCategory });
-      await loadTasks(selectedDate);
-    } catch (err: any) {
-      setError(err.message || 'Ошибка смены категории');
-    }
+    const isoNow = new Date().toISOString();
+    const updated = tasks.map((t) =>
+      t.id === taskId ? { ...t, category: newCategory, updated_at: isoNow } : t
+    );
+    setTasks(updated);
+    setCachedTasks(selectedDate, updated);
+    enqueueAction({
+      type: 'UPDATE_TASK',
+      taskId,
+      payload: { category: newCategory },
+    });
   };
 
   const handleStartTimer = async (taskId: string) => {
-    try {
-      await api.startTimer(taskId);
-      await Promise.all([loadTasks(selectedDate), loadDaysStats()]);
-    } catch (err: any) {
-      setError(err.message || 'Ошибка запуска таймера');
-    }
+    const isoNow = new Date().toISOString();
+    const newIntervalId = generateClientUUID();
+
+    const updated = tasks.map((t) => {
+      if (t.id === taskId) {
+        if (t.is_active) return t;
+        const newInv: TimeInterval = {
+          id: newIntervalId,
+          task_id: t.id,
+          start_time: isoNow,
+          end_time: null,
+          duration_seconds: 0,
+          created_at: isoNow,
+          updated_at: isoNow,
+        };
+        return {
+          ...t,
+          is_active: true,
+          active_interval_id: newIntervalId,
+          intervals: [...t.intervals, newInv],
+          updated_at: isoNow,
+        };
+      } else if (t.is_active) {
+        return pauseTaskLocally(t, isoNow);
+      }
+      return t;
+    });
+
+    setTasks(updated);
+    setCachedTasks(selectedDate, updated);
+    enqueueAction({
+      type: 'START_TIMER',
+      taskId,
+      payload: {
+        at: isoNow,
+        interval_id: newIntervalId,
+      },
+    });
   };
 
   const handlePauseTimer = async (taskId: string) => {
-    try {
-      await api.pauseTimer(taskId);
-      await Promise.all([loadTasks(selectedDate), loadDaysStats()]);
-    } catch (err: any) {
-      setError(err.message || 'Ошибка остановки таймера');
-    }
+    const isoNow = new Date().toISOString();
+    const updated = tasks.map((t) => (t.id === taskId ? pauseTaskLocally(t, isoNow) : t));
+    setTasks(updated);
+    setCachedTasks(selectedDate, updated);
+    enqueueAction({
+      type: 'PAUSE_TIMER',
+      taskId,
+      payload: {
+        at: isoNow,
+      },
+    });
   };
 
   const handleUpdateTitle = async (taskId: string, newTitle: string) => {
-    try {
-      await api.updateTask(taskId, { title: newTitle });
-      await loadTasks(selectedDate);
-    } catch (err: any) {
-      setError(err.message || 'Ошибка переименования задачи');
-    }
+    const trimmed = newTitle.trim();
+    if (!trimmed) return;
+    const isoNow = new Date().toISOString();
+    const updated = tasks.map((t) =>
+      t.id === taskId ? { ...t, title: trimmed, updated_at: isoNow } : t
+    );
+    setTasks(updated);
+    setCachedTasks(selectedDate, updated);
+    enqueueAction({
+      type: 'UPDATE_TASK',
+      taskId,
+      payload: { title: trimmed },
+    });
   };
 
   const handleDeleteTask = async (taskId: string) => {
-    try {
-      await api.deleteTask(taskId);
-      await Promise.all([loadTasks(selectedDate), loadDaysStats()]);
-    } catch (err: any) {
-      setError(err.message || 'Ошибка удаления задачи');
-    }
+    const updated = tasks.filter((t) => t.id !== taskId);
+    setTasks(updated);
+    setCachedTasks(selectedDate, updated);
+    enqueueAction({
+      type: 'DELETE_TASK',
+      taskId,
+    });
   };
 
   // Interval modal handlers
@@ -302,23 +543,124 @@ export const App: React.FC = () => {
     const { task, interval } = intervalModalState;
     if (!task) return;
 
+    const isoNow = new Date().toISOString();
+    const startMs = new Date(startIso).getTime();
+    const endMs = endIso ? new Date(endIso).getTime() : Date.now();
+    const duration = Math.max(0, Math.floor((endMs - startMs) / 1000));
+
+    let updatedTasks = [...tasks];
+
     if (interval) {
-      await api.updateInterval(interval.id, {
-        start_time: startIso,
-        end_time: endIso,
+      updatedTasks = updatedTasks.map((t) => {
+        if (t.id !== task.id) {
+          if (endIso === null && t.is_active) {
+            return pauseTaskLocally(t, startIso);
+          }
+          return t;
+        }
+        const intervals = t.intervals.map((inv) =>
+          inv.id === interval.id
+            ? { ...inv, start_time: startIso, end_time: endIso, duration_seconds: duration, updated_at: isoNow }
+            : inv
+        );
+        const is_active = intervals.some((inv) => inv.end_time === null);
+        const active_inv = intervals.find((inv) => inv.end_time === null);
+        const total_sec = intervals.reduce((acc, inv) => acc + inv.duration_seconds, 0);
+        return {
+          ...t,
+          intervals,
+          is_active,
+          active_interval_id: active_inv ? active_inv.id : null,
+          total_duration_seconds: total_sec,
+          updated_at: isoNow,
+        };
+      });
+
+      enqueueAction({
+        type: 'UPDATE_INTERVAL',
+        intervalId: interval.id,
+        payload: {
+          start_time: startIso,
+          end_time: endIso,
+        },
       });
     } else {
-      await api.addInterval(task.id, {
+      const newIntervalId = generateClientUUID();
+      const newInv: TimeInterval = {
+        id: newIntervalId,
+        task_id: task.id,
         start_time: startIso,
         end_time: endIso,
+        duration_seconds: duration,
+        created_at: isoNow,
+        updated_at: isoNow,
+      };
+
+      updatedTasks = updatedTasks.map((t) => {
+        if (t.id !== task.id) {
+          if (endIso === null && t.is_active) {
+            return pauseTaskLocally(t, startIso);
+          }
+          return t;
+        }
+        const intervals = [...t.intervals, newInv].sort(
+          (a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
+        );
+        const is_active = intervals.some((inv) => inv.end_time === null);
+        const active_inv = intervals.find((inv) => inv.end_time === null);
+        const total_sec = intervals.reduce((acc, inv) => acc + inv.duration_seconds, 0);
+        return {
+          ...t,
+          intervals,
+          is_active,
+          active_interval_id: active_inv ? active_inv.id : null,
+          total_duration_seconds: total_sec,
+          updated_at: isoNow,
+        };
+      });
+
+      enqueueAction({
+        type: 'ADD_INTERVAL',
+        taskId: task.id,
+        payload: {
+          id: newIntervalId,
+          start_time: startIso,
+          end_time: endIso,
+        },
       });
     }
-    await Promise.all([loadTasks(selectedDate), loadDaysStats()]);
+
+    setTasks(updatedTasks);
+    setCachedTasks(selectedDate, updatedTasks);
   };
 
   const handleDeleteInterval = async (intervalId: string) => {
-    await api.deleteInterval(intervalId);
-    await Promise.all([loadTasks(selectedDate), loadDaysStats()]);
+    const isoNow = new Date().toISOString();
+    const updatedTasks = tasks.map((t) => {
+      const hasInterval = t.intervals.some((inv) => inv.id === intervalId);
+      if (!hasInterval) return t;
+
+      const intervals = t.intervals.filter((inv) => inv.id !== intervalId);
+      const is_active = intervals.some((inv) => inv.end_time === null);
+      const active_inv = intervals.find((inv) => inv.end_time === null);
+      const total_sec = intervals.reduce((acc, inv) => acc + inv.duration_seconds, 0);
+      return {
+        ...t,
+        intervals,
+        is_active,
+        active_interval_id: active_inv ? active_inv.id : null,
+        total_duration_seconds: total_sec,
+        updated_at: isoNow,
+      };
+    });
+
+    setTasks(updatedTasks);
+    setCachedTasks(selectedDate, updatedTasks);
+
+    enqueueAction({
+      type: 'DELETE_INTERVAL',
+      intervalId,
+    });
   };
 
   const handleToggleSelect = (taskId: string) => {
@@ -343,15 +685,17 @@ export const App: React.FC = () => {
 
   const handleBulkDelete = async () => {
     if (selectedTaskIds.size === 0) return;
-    try {
-      setError(null);
-      await api.bulkDeleteTasks(Array.from(selectedTaskIds));
-      setSelectedTaskIds(new Set());
-      setIsSelectionMode(false);
-      await Promise.all([loadTasks(selectedDate), loadDaysStats()]);
-    } catch (err: any) {
-      setError(err.message || 'Ошибка при совместном удалении задач');
-    }
+    const ids = Array.from(selectedTaskIds);
+    const updatedTasks = tasks.filter((t) => !selectedTaskIds.has(t.id));
+    setTasks(updatedTasks);
+    setCachedTasks(selectedDate, updatedTasks);
+    setSelectedTaskIds(new Set());
+    setIsSelectionMode(false);
+
+    enqueueAction({
+      type: 'BULK_DELETE_TASKS',
+      taskIds: ids,
+    });
   };
 
   const isTodaySelected = selectedDate === getTodayDateStr();
@@ -385,9 +729,38 @@ export const App: React.FC = () => {
                     <h1 className="text-2xl sm:text-3xl lg:text-3xl font-bold tracking-tight text-slate-900 dark:text-white leading-tight">
                       {getDayOfWeekName(selectedDate)}
                     </h1>
-                    <p className="text-sm sm:text-base font-normal text-slate-500 dark:text-slate-400 mt-0.5">
-                      {getFormattedDayMonth(selectedDate)}
-                    </p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <p className="text-sm sm:text-base font-normal text-slate-500 dark:text-slate-400">
+                        {getFormattedDayMonth(selectedDate)}
+                      </p>
+
+                      {/* Network / Offline / Sync Status Indicator */}
+                      {!syncState.isOnline ? (
+                        <span
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 text-[11px] font-medium"
+                          title="Офлайн режим. Данные сохраняются локально и отправятся на сервер при появлении интернета."
+                        >
+                          <WifiOff className="w-3 h-3" />
+                          <span>Офлайн{syncState.pendingCount > 0 ? ` (${syncState.pendingCount})` : ''}</span>
+                        </span>
+                      ) : syncState.isSyncing ? (
+                        <span
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 text-[11px] font-medium animate-pulse"
+                          title="Синхронизация данных с сервером..."
+                        >
+                          <RefreshCw className="w-3 h-3 animate-spin" />
+                          <span>Синхронизация{syncState.pendingCount > 0 ? ` (${syncState.pendingCount})` : ''}</span>
+                        </span>
+                      ) : showJustSynced ? (
+                        <span
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[11px] font-medium animate-in fade-in duration-200"
+                          title="Все данные успешно сохранены на сервере"
+                        >
+                          <Check className="w-3 h-3" />
+                          <span>Синхронизировано</span>
+                        </span>
+                      ) : null}
+                    </div>
                   </div>
 
                   {/* Date Navigation & Calendar Trigger */}
