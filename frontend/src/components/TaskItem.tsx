@@ -124,6 +124,7 @@ export const TaskItem: React.FC<TaskItemProps> = ({
             : `Задача: ${task.title}. ${isExpanded ? 'Свернуть детали' : 'Развернуть детали'}`
         }
         onKeyDown={(e) => {
+          if (e.target !== e.currentTarget) return;
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
             if (isSelectionMode) {
