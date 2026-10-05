@@ -1,9 +1,19 @@
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event, text
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 from app.config import DATABASE_URL
 
 # SQLite specific connect args for multi-threading in FastAPI
 connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
+
+
+@event.listens_for(Engine, "connect")
+def _register_sqlite_functions(dbapi_connection, connection_record):
+    """Registers a Unicode-aware casefold() for SQLite (built-in lower()/LIKE are ASCII-only)."""
+    if hasattr(dbapi_connection, "create_function"):
+        dbapi_connection.create_function(
+            "casefold", 1, lambda value: value.casefold() if value is not None else None
+        )
 
 engine = create_engine(
     DATABASE_URL,

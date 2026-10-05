@@ -1,3 +1,5 @@
+import csv
+import io
 import os
 import pytest
 from datetime import datetime, timezone, timedelta
@@ -11,6 +13,7 @@ os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 
 from app.database import Base, get_db
 from app.main import app
+from app import config
 
 # Create in-memory SQLite engine for tests
 test_engine = create_engine(
@@ -328,5 +331,188 @@ def test_offline_sync_timestamps_and_client_ids(client):
     assert inv_res.status_code == 201
     assert inv_res.json()["id"] == custom_manual_inv_id
     assert inv_res.json()["duration_seconds"] == 900
+
+
+# --- Analytics: /api/summary, /api/entries, /api/meta, read token ---
+
+
+def _seed_interval(client, title, date_str, start_iso, end_iso, category="work"):
+    res = client.post("/api/tasks", json={
+        "title": title,
+        "date": date_str,
+        "category": category,
+        "auto_start": False,
+    })
+    assert res.status_code == 201
+    task_id = res.json()["id"]
+    inv = client.post(f"/api/tasks/{task_id}/intervals", json={
+        "start_time": start_iso,
+        "end_time": end_iso,
+    })
+    assert inv.status_code == 201
+    return task_id
+
+
+def test_summary_single_day_matches_day_summary(client):
+    _seed_interval(client, "Отчёт", "2026-09-12", "2026-09-12T04:00:00Z", "2026-09-12T06:30:00Z")
+
+    summary = client.get("/api/summary?from=2026-09-12&to=2026-09-12").json()
+    day = client.get("/api/days/2026-09-12/summary").json()
+
+    assert summary["total_seconds"] == day["total_seconds"] == 9000
+
+
+def test_summary_parts_sum_to_total(client):
+    _seed_interval(client, "A", "2026-09-12", "2026-09-12T04:00:00Z", "2026-09-12T06:00:00Z")
+    _seed_interval(client, "B", "2026-09-13", "2026-09-13T04:00:00Z", "2026-09-13T05:00:00Z")
+
+    data = client.get("/api/summary?from=2026-09-12&to=2026-09-13").json()
+
+    assert data["total_seconds"] == 10800
+    assert sum(d["total_seconds"] for d in data["days"]) == data["total_seconds"]
+    assert sum(t["total_seconds"] for t in data["tasks"]) == data["total_seconds"]
+    assert sum(c["total_seconds"] for c in data["categories"]) == data["total_seconds"]
+
+
+def test_summary_compare_previous_period(client):
+    _seed_interval(client, "Prev", "2026-09-07", "2026-09-07T04:00:00Z", "2026-09-07T05:06:40Z")  # 4000s
+    _seed_interval(client, "Cur", "2026-09-10", "2026-09-10T04:00:00Z", "2026-09-10T05:23:20Z")  # 5000s
+
+    data = client.get("/api/summary?from=2026-09-10&to=2026-09-12&compare=true").json()
+
+    assert data["total_seconds"] == 5000
+    assert data["compare"]["from"] == "2026-09-07"
+    assert data["compare"]["to"] == "2026-09-09"
+    assert data["compare"]["total_seconds"] == 4000
+    assert data["compare"]["delta_seconds"] == 1000
+    assert data["compare"]["delta_percent"] == 25.0
+
+
+def test_summary_counts_running_interval(client):
+    now = datetime.now(timezone.utc)
+    start = now - timedelta(minutes=30)
+    date_str = now.date().isoformat()
+    res = client.post("/api/tasks", json={
+        "title": "Running",
+        "date": date_str,
+        "auto_start": True,
+        "at": start.isoformat(),
+    })
+    assert res.status_code == 201
+
+    data = client.get(f"/api/summary?from={date_str}&to={date_str}").json()
+    assert data["has_running"] is True
+    assert data["running_seconds"] >= 1700
+    assert data["total_seconds"] >= 1700
+
+
+def test_summary_empty_range_returns_zeros(client):
+    res = client.get("/api/summary?from=2026-01-01&to=2026-01-05")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["total_seconds"] == 0
+    assert data["days"] == []
+    assert data["tasks"] == []
+    assert data["categories"] == []
+
+
+def test_summary_bad_inputs(client):
+    assert client.get("/api/summary?from=2026-13-40&to=2026-13-41").status_code == 422
+    assert client.get("/api/summary?from=2026-09-01&to=2026-09-02&tz=Nope/Nope").status_code == 400
+    assert client.get("/api/summary?from=2026-09-10&to=2026-09-01").status_code == 400
+    assert client.get("/api/summary").status_code == 400
+
+
+def test_summary_month_period_boundaries(client):
+    res = client.get("/api/summary?period=month&anchor=2026-09-15&tz=Asia/Almaty")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["from"] == "2026-09-01"
+    assert data["to"] == "2026-09-30"
+
+
+def test_entries_matches_csv(client):
+    _seed_interval(client, "Отчёт", "2026-09-12", "2026-09-12T04:00:00Z", "2026-09-12T06:30:00Z")
+    _seed_interval(client, "Созвон", "2026-09-12", "2026-09-12T07:00:00Z", "2026-09-12T07:30:00Z")
+
+    entries = client.get("/api/entries?from=2026-09-12&to=2026-09-12").json()
+    entries_total = sum(e["duration_seconds"] for e in entries["entries"])
+
+    csv_res = client.get("/api/export/csv?date_from=2026-09-12&date_to=2026-09-12")
+    reader = csv.reader(io.StringIO(csv_res.text))
+    next(reader)  # skip header
+    csv_total = 0
+    csv_rows = 0
+    for row in reader:
+        if row[4]:  # non-empty Interval ID
+            csv_rows += 1
+            csv_total += int(row[7])
+
+    assert entries["count"] == csv_rows
+    assert entries_total == csv_total == 10800
+
+
+def test_meta_endpoint(client):
+    res = client.get("/api/meta")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["api_version"] == config.API_VERSION
+    assert data["default_tz"] == config.DEFAULT_TZ
+    assert [c["id"] for c in data["categories"]] == ["work", "personal", "study"]
+
+
+def test_read_token_guard(client, monkeypatch):
+    monkeypatch.setattr(config, "READ_TOKEN", "secret")
+    _seed_interval(client, "Данные", "2026-09-12", "2026-09-12T04:00:00Z", "2026-09-12T05:00:00Z")
+
+    # Protected read: no token -> 401, correct token -> 200
+    assert client.get("/api/summary?from=2026-09-12&to=2026-09-12").status_code == 401
+    ok = client.get(
+        "/api/summary?from=2026-09-12&to=2026-09-12",
+        headers={"Authorization": "Bearer secret"},
+    )
+    assert ok.status_code == 200
+    assert ok.headers["X-Tracker-Version"] == config.API_VERSION
+
+    # Health is always open
+    assert client.get("/api/health").status_code == 200
+
+    # UI endpoints stay open (no token required)
+    assert client.get("/api/tasks?date=2026-09-12").status_code == 200
+
+    # Read token must not be accepted for writes
+    assert client.post(
+        "/api/tasks",
+        json={"title": "Nope", "date": "2026-09-12", "auto_start": False},
+        headers={"Authorization": "Bearer secret"},
+    ).status_code == 403
+
+
+def test_summary_merges_cyrillic_titles_case_insensitive(client):
+    _seed_interval(client, "Отчёт", "2026-09-12", "2026-09-12T04:00:00Z", "2026-09-12T05:00:00Z")
+    _seed_interval(client, "ОТЧЁТ", "2026-09-13", "2026-09-13T04:00:00Z", "2026-09-13T04:30:00Z")
+
+    data = client.get("/api/summary?from=2026-09-12&to=2026-09-13").json()
+    assert len(data["tasks"]) == 1
+    assert data["tasks"][0]["total_seconds"] == 5400
+    assert data["tasks"][0]["day_count"] == 2
+
+
+def test_entries_task_filter_cyrillic_case_insensitive(client):
+    _seed_interval(client, "Отчёт Гознак", "2026-09-12", "2026-09-12T04:00:00Z", "2026-09-12T06:30:00Z")
+
+    data = client.get("/api/entries", params={"from": "2026-09-12", "to": "2026-09-12", "task": "отч"}).json()
+    assert data["count"] == 1
+    assert data["entries"][0]["task_title"] == "Отчёт Гознак"
+
+
+def test_invalid_category_rejected(client):
+    res = client.post("/api/tasks", json={
+        "title": "Bad cat",
+        "date": "2026-09-12",
+        "category": "other",
+        "auto_start": False,
+    })
+    assert res.status_code == 422
 
 

@@ -3,9 +3,10 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from app.config import STATIC_DIR
+from app.config import API_VERSION, STATIC_DIR
 from app.database import engine, Base, init_db
-from app.routers import tasks, days, export
+from app.routers import tasks, days, export, summary, entries, meta
+from app.auth import auth_and_version_middleware
 
 
 @asynccontextmanager
@@ -18,7 +19,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="TimeTracker API",
     description="REST API для простого учета времени на задачи в течение дня",
-    version="1.0.0",
+    version=API_VERSION,
     lifespan=lifespan,
 )
 
@@ -29,12 +30,19 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-Tracker-Version"],
 )
+
+# Read-token guard + X-Tracker-Version response header
+app.middleware("http")(auth_and_version_middleware)
 
 # Include API routers
 app.include_router(tasks.router)
 app.include_router(days.router)
 app.include_router(export.router)
+app.include_router(summary.router)
+app.include_router(entries.router)
+app.include_router(meta.router)
 
 
 @app.get("/api/health", tags=["Health"])

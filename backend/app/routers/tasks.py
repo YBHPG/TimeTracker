@@ -1,8 +1,9 @@
 from typing import List, Optional
-from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from app.database import get_db
+from app.config import DEFAULT_TZ
+from app.timeutils import get_zone, today_in_tz
 from app import schemas, crud
 
 router = APIRouter(prefix="/api", tags=["Tasks & Timers"])
@@ -11,10 +12,16 @@ router = APIRouter(prefix="/api", tags=["Tasks & Timers"])
 @router.get("/tasks", response_model=List[schemas.TaskOut])
 def list_tasks(
     date_str: Optional[str] = Query(None, alias="date", pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    tz: Optional[str] = Query(None),
     db: Session = Depends(get_db),
 ):
-    """Retrieve all tasks for a specific date (defaults to today in UTC if not specified)."""
-    target_date = date_str if date_str else date.today().isoformat()
+    """Retrieve all tasks for a specific date (defaults to today in the given timezone)."""
+    tz_name = tz or DEFAULT_TZ
+    try:
+        get_zone(tz_name)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Unknown timezone: {tz_name}")
+    target_date = date_str if date_str else today_in_tz(tz_name).isoformat()
     return crud.get_tasks_by_date(db, target_date)
 
 
