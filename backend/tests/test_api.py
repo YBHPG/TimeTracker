@@ -333,6 +333,65 @@ def test_offline_sync_timestamps_and_client_ids(client):
     assert inv_res.json()["duration_seconds"] == 900
 
 
+def test_out_of_order_start_does_not_clobber_newer_timer(client):
+    # Phone (offline) started "A" at 10:00; meanwhile the computer started "B" at 11:00.
+    # When the phone later flushes its queued START for A, B must keep running.
+    a = client.post("/api/tasks", json={
+        "id": "task-a",
+        "title": "A",
+        "date": "2026-09-05",
+        "category": "work",
+        "auto_start": False,
+    }).json()
+    b = client.post("/api/tasks", json={
+        "id": "task-b",
+        "title": "B",
+        "date": "2026-09-05",
+        "category": "work",
+        "auto_start": True,
+        "at": "2026-09-05T11:00:00Z",
+    }).json()
+    assert b["is_active"] is True
+
+    # Replay the phone's older START for A
+    res = client.post(f"/api/tasks/{a['id']}/start", json={
+        "at": "2026-09-05T10:00:00Z",
+        "interval_id": "inv-a",
+    })
+    assert res.status_code == 200
+    a_after = res.json()
+
+    # A is recorded as already elapsed up to when B started (10:00 -> 11:00): no time lost
+    assert a_after["is_active"] is False
+    assert len(a_after["intervals"]) == 1
+    assert a_after["intervals"][0]["start_time"].startswith("2026-09-05T10:00:00")
+    assert a_after["intervals"][0]["end_time"].startswith("2026-09-05T11:00:00")
+    assert a_after["intervals"][0]["duration_seconds"] == 3600
+
+    # B is untouched and still running
+    b_after = client.get(f"/api/tasks/{b['id']}").json()
+    assert b_after["is_active"] is True
+    assert b_after["intervals"][0]["start_time"].startswith("2026-09-05T11:00:00")
+    assert b_after["intervals"][0]["end_time"] is None
+
+
+def test_stale_pause_is_ignored(client):
+    # A timer running since 10:00 must survive a replayed pause stamped before it started (09:00)
+    res = client.post("/api/tasks", json={
+        "title": "Running",
+        "date": "2026-09-05",
+        "auto_start": True,
+        "at": "2026-09-05T10:00:00Z",
+    })
+    task_id = res.json()["id"]
+    assert res.json()["is_active"] is True
+
+    pause_res = client.post(f"/api/tasks/{task_id}/pause", json={"at": "2026-09-05T09:00:00Z"})
+    assert pause_res.status_code == 200
+    assert pause_res.json()["is_active"] is True
+    assert pause_res.json()["intervals"][0]["end_time"] is None
+
+
 # --- Analytics: /api/summary, /api/entries, /api/meta, read token ---
 
 

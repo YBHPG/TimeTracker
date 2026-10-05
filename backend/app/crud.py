@@ -68,20 +68,77 @@ def enrich_task_out(task: Task) -> schemas.TaskOut:
 
 
 def pause_all_active_intervals(db: Session, except_task_id: Optional[str] = None, at: Optional[datetime] = None) -> int:
-    """Pauses all currently active intervals across all tasks (except optionally for a specific task)."""
-    now = at or utc_now()
+    """Pauses all currently active intervals across all tasks (except optionally for a specific task).
+
+    Intervals that started *after* the given moment are left untouched: an action taken
+    at time `at` must never overwrite an interval that is chronologically newer than it.
+    This protects against out-of-order offline sync replay (e.g. a phone flushing a
+    long-queued START_TIMER after another device already started a later task).
+    """
+    now = ensure_utc(at or utc_now())
     query = db.query(TimeInterval).filter(TimeInterval.end_time.is_(None))
     if except_task_id:
         query = query.filter(TimeInterval.task_id != except_task_id)
 
     active_intervals = query.all()
-    count = len(active_intervals)
+    count = 0
     for inv in active_intervals:
+        if ensure_utc(inv.start_time) > now:
+            continue
         inv.end_time = now
         inv.updated_at = now
+        count += 1
     if count > 0:
         db.commit()
     return count
+
+
+def later_active_start(db: Session, at: datetime, except_task_id: Optional[str] = None) -> Optional[datetime]:
+    """Earliest start_time among running intervals that began strictly after `at`."""
+    query = db.query(TimeInterval).filter(TimeInterval.end_time.is_(None))
+    if except_task_id:
+        query = query.filter(TimeInterval.task_id != except_task_id)
+
+    starts = [ensure_utc(inv.start_time) for inv in query.all()]
+    starts = [s for s in starts if s > ensure_utc(at)]
+    return min(starts) if starts else None
+
+
+def start_interval_chronologically(
+    db: Session,
+    task: Task,
+    start_dt: datetime,
+    interval_id: Optional[str] = None,
+) -> TimeInterval:
+    """Starts an interval on `task` while keeping the timeline chronological.
+
+    Normally this pauses any other running timer and opens a new active interval.
+    If a newer interval is already running (it started after `start_dt`), that one wins:
+    the replayed interval is instead recorded as already elapsed up to the newer start,
+    so no time is lost and the newer timer keeps running.
+    """
+    start_dt = ensure_utc(start_dt)
+    newer_start = later_active_start(db, start_dt, except_task_id=task.id)
+
+    if newer_start is not None:
+        inv = TimeInterval(
+            id=interval_id or generate_uuid(),
+            task_id=task.id,
+            start_time=start_dt,
+            end_time=newer_start,
+        )
+    else:
+        pause_all_active_intervals(db, at=start_dt)
+        inv = TimeInterval(
+            id=interval_id or generate_uuid(),
+            task_id=task.id,
+            start_time=start_dt,
+            end_time=None,
+        )
+
+    db.add(inv)
+    task.updated_at = start_dt
+    return inv
 
 
 def get_task(db: Session, task_id: str) -> Optional[Task]:
@@ -99,11 +156,7 @@ def get_tasks_by_date(db: Session, date_str: str) -> List[schemas.TaskOut]:
 
 
 def create_task(db: Session, task_in: schemas.TaskCreate) -> schemas.TaskOut:
-    create_dt = task_in.at or utc_now()
-
-    # If auto_start is true, pause any other active timers first
-    if task_in.auto_start:
-        pause_all_active_intervals(db, at=create_dt)
+    create_dt = ensure_utc(task_in.at or utc_now())
 
     cleaned_title = task_in.title.strip()
     category = task_in.category or "work"
@@ -127,12 +180,7 @@ def create_task(db: Session, task_in: schemas.TaskCreate) -> schemas.TaskOut:
                 .first()
             )
             if not active_inv:
-                interval = TimeInterval(
-                    task_id=existing_task.id,
-                    start_time=create_dt,
-                    end_time=None,
-                )
-                db.add(interval)
+                start_interval_chronologically(db, existing_task, create_dt)
 
         existing_task.updated_at = create_dt
         db.commit()
@@ -160,12 +208,7 @@ def create_task(db: Session, task_in: schemas.TaskCreate) -> schemas.TaskOut:
     db.flush()
 
     if task_in.auto_start:
-        interval = TimeInterval(
-            task_id=task.id,
-            start_time=create_dt,
-            end_time=None,
-        )
-        db.add(interval)
+        start_interval_chronologically(db, task, create_dt)
 
     db.commit()
     db.refresh(task)
@@ -217,7 +260,7 @@ def start_task_timer(db: Session, task_id: str, at: Optional[datetime] = None, i
     if not task:
         return None
 
-    start_dt = at or utc_now()
+    start_dt = ensure_utc(at or utc_now())
 
     # Check if already active
     active_inv = (
@@ -226,22 +269,12 @@ def start_task_timer(db: Session, task_id: str, at: Optional[datetime] = None, i
         .first()
     )
     if active_inv:
-        # Already running, but ensure other tasks are paused
+        # Already running, but ensure other (older) tasks are paused
         pause_all_active_intervals(db, except_task_id=task_id, at=start_dt)
         return enrich_task_out(task)
 
-    # Pause any other active timer
-    pause_all_active_intervals(db, at=start_dt)
-
-    # Start new interval
-    new_inv = TimeInterval(
-        id=interval_id or generate_uuid(),
-        task_id=task.id,
-        start_time=start_dt,
-        end_time=None,
-    )
-    db.add(new_inv)
-    task.updated_at = start_dt
+    # Start new interval (never disturbing a chronologically newer running timer)
+    start_interval_chronologically(db, task, start_dt, interval_id)
     db.commit()
     db.refresh(task)
     return enrich_task_out(task)
@@ -252,13 +285,16 @@ def pause_task_timer(db: Session, task_id: str, at: Optional[datetime] = None) -
     if not task:
         return None
 
-    pause_dt = at or utc_now()
+    pause_dt = ensure_utc(at or utc_now())
     active_intervals = (
         db.query(TimeInterval)
         .filter(TimeInterval.task_id == task_id, TimeInterval.end_time.is_(None))
         .all()
     )
     for inv in active_intervals:
+        # Skip stale pauses that predate the interval (out-of-order sync replay)
+        if ensure_utc(inv.start_time) > pause_dt:
+            continue
         inv.end_time = pause_dt
         inv.updated_at = pause_dt
 
@@ -274,15 +310,15 @@ def add_interval(db: Session, task_id: str, interval_in: schemas.TimeIntervalCre
         return None
 
     if interval_in.end_time is None:
-        pause_all_active_intervals(db, at=interval_in.start_time)
-
-    inv = TimeInterval(
-        id=interval_in.id or generate_uuid(),
-        task_id=task_id,
-        start_time=interval_in.start_time,
-        end_time=interval_in.end_time,
-    )
-    db.add(inv)
+        inv = start_interval_chronologically(db, task, interval_in.start_time, interval_in.id)
+    else:
+        inv = TimeInterval(
+            id=interval_in.id or generate_uuid(),
+            task_id=task_id,
+            start_time=interval_in.start_time,
+            end_time=interval_in.end_time,
+        )
+        db.add(inv)
     task.updated_at = utc_now()
     db.commit()
     db.refresh(inv)

@@ -62,6 +62,18 @@ gitGraph
 
 ---
 
+### [v1.5.0] — 2026-10-05
+**Тема:** кнопка ручного обновления и защита от конфликтов синхронизации между устройствами
+
+#### Добавлено:
+- **Кнопка обновления** в шапке дня ([`App.tsx`](file:///Users/bulbadyshka/Documents/programming/personal_projects/timeTracker/frontend/src/App.tsx)): сбрасывает очередь офлайн-действий (`triggerSync`) и повторно загружает задачи выбранного дня и статистику с сервера. Решает проблему устаревания данных в PWA, который долго висит в памяти телефона и не перезапрашивает данные сам.
+
+#### Исправлено:
+- **Конфликт синхронизации при отложенной отправке**: действие с меткой времени `at` больше не может перезаписать интервал, начавшийся позже него. Если на телефоне (офлайн) шла задача A, а на компьютере уже запущена более новая задача B, при отправке отложенного `START_TIMER` для A интервал A записывается как завершённый в момент старта B (время A не теряется), а B продолжает идти. Реализовано в [`backend/app/crud.py`](file:///Users/bulbadyshka/Documents/programming/personal_projects/timeTracker/backend/app/crud.py): `pause_all_active_intervals` пропускает интервалы новее переданного времени; добавлены `later_active_start` и `start_interval_chronologically`; защита от «устаревшей» паузы в `pause_task_timer`.
+- **Регрессионные тесты**: `test_out_of_order_start_does_not_clobber_newer_timer` и `test_stale_pause_is_ignored` в [`backend/tests/test_api.py`](file:///Users/bulbadyshka/Documents/programming/personal_projects/timeTracker/backend/tests/test_api.py).
+
+---
+
 ### [v1.4.0] — 2026-10-05
 **Тема:** read-only API для связки с Hermes (аналитика и выгрузки)
 

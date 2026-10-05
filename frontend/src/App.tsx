@@ -30,6 +30,7 @@ import {
   enqueueAction,
   subscribeSyncState,
   onQueueDrained,
+  triggerSync,
   generateClientUUID,
   SyncState,
 } from './utils/syncManager';
@@ -92,6 +93,7 @@ export const App: React.FC = () => {
     lastSyncedAt: null,
   });
   const [showJustSynced, setShowJustSynced] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Active view tab: 'home' | 'stats'
   const [activeTab, setActiveTab] = useState<'home' | 'stats'>('home');
@@ -239,6 +241,22 @@ export const App: React.FC = () => {
       // Non-critical
     }
   }, []);
+
+  // Manual refresh: flush any pending offline actions, then pull fresh data from the server.
+  // Needed because a PWA kept in memory does not re-fetch on its own.
+  const handleRefresh = useCallback(async () => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    setError(null);
+    try {
+      if (navigator.onLine) {
+        await triggerSync();
+      }
+      await Promise.all([loadTasks(selectedDate), loadDaysStats()]);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [isRefreshing, selectedDate, loadTasks, loadDaysStats]);
 
   // Re-fetch when sync queue is drained
   useEffect(() => {
@@ -793,6 +811,17 @@ export const App: React.FC = () => {
                       className="p-1.5 ml-1 rounded-full text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E0533C]"
                     >
                       <CalendarIcon className="w-4 h-4" />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleRefresh}
+                      disabled={isRefreshing}
+                      aria-label="Обновить данные"
+                      title="Обновить данные"
+                      className="p-1.5 ml-0.5 rounded-full text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E0533C]"
+                    >
+                      <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
                     </button>
                   </div>
                 </div>
