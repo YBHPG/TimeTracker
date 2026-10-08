@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { api } from './api/client';
+import { api, AuthRequiredError } from './api/client';
 import { Task, TimeInterval, DayStatItem, TaskCategory } from './types';
 import { useTheme } from './hooks/useTheme';
 import { useTimerTick } from './hooks/useTimerTick';
+import { usePullToRefresh, PULL_REFRESH_THRESHOLD } from './hooks/usePullToRefresh';
 import { TimelineStrip } from './components/TimelineStrip';
 import { TaskItem } from './components/TaskItem';
 import { BottomNav } from './components/BottomNav';
@@ -77,6 +78,9 @@ function pauseTaskLocally(task: Task, isoTime: string): Task {
   };
 }
 
+const IS_TOUCH_DEVICE =
+  typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches;
+
 export const App: React.FC = () => {
   const { theme, setTheme } = useTheme();
   const [selectedDate, setSelectedDate] = useState<string>(getTodayDateStr());
@@ -112,6 +116,7 @@ export const App: React.FC = () => {
   const [canScrollUp, setCanScrollUp] = useState(false);
   const [canScrollDown, setCanScrollDown] = useState(false);
   const taskListRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   const checkScroll = useCallback(() => {
     const el = taskListRef.current;
@@ -220,6 +225,8 @@ export const App: React.FC = () => {
       setCachedTasks(dateStr, data);
       setError(null);
     } catch (err: any) {
+      // The browser is already being redirected to the Authelia login portal.
+      if (err instanceof AuthRequiredError) return;
       if (!cached && navigator.onLine) {
         setError(err.message || 'Не удалось загрузить задачи');
       }
@@ -257,6 +264,13 @@ export const App: React.FC = () => {
       setIsRefreshing(false);
     }
   }, [isRefreshing, selectedDate, loadTasks, loadDaysStats]);
+
+  // Pull-to-refresh gesture (touch devices only; standalone PWA has no native one)
+  const { pullDistance, isRefreshing: isPullRefreshing } = usePullToRefresh(
+    scrollRef,
+    handleRefresh,
+    IS_TOUCH_DEVICE,
+  );
 
   // Re-fetch when sync queue is drained
   useEffect(() => {
@@ -733,7 +747,23 @@ export const App: React.FC = () => {
         )}
 
         {/* Main Workspace Layout */}
-        <div className="flex-1 p-5 sm:p-7 lg:p-8 pb-24 lg:pb-24 overflow-y-auto lg:overflow-hidden min-h-0">
+        <div ref={scrollRef} className="flex-1 p-5 sm:p-7 lg:p-8 pb-24 lg:pb-24 overflow-y-auto lg:overflow-hidden min-h-0">
+          {(pullDistance > 0 || isPullRefreshing) && (
+            <div
+              className="flex items-center justify-center gap-2 -mt-2 mb-1 text-xs font-medium text-slate-500 dark:text-slate-400 overflow-hidden"
+              style={{ height: pullDistance }}
+              aria-hidden="true"
+            >
+              <RefreshCw className={`w-4 h-4 ${isPullRefreshing ? 'animate-spin' : ''}`} />
+              <span>
+                {isPullRefreshing
+                  ? 'Обновление…'
+                  : pullDistance >= PULL_REFRESH_THRESHOLD
+                    ? 'Отпустите, чтобы обновить'
+                    : 'Потяните вниз для обновления'}
+              </span>
+            </div>
+          )}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-10 lg:h-full min-h-0">
             
             {/* ======================================================== */}

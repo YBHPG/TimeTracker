@@ -1,6 +1,5 @@
-const CACHE_NAME = 'timetracker-v1.1';
+const CACHE_NAME = 'timetracker-v1.2';
 const PRECACHE_ASSETS = [
-  '/',
   '/index.html',
   '/manifest.webmanifest',
   '/favicon.svg',
@@ -32,14 +31,15 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Fetch: network-first for API, cache-first/stale-while-revalidate for assets
+// Fetch: never swallow the Authelia forward-auth redirect.
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
-  // 1. API requests: always go to network, never cache to keep real-time timers accurate
+  // 1. API requests: let the browser handle them natively. Intercepting them would
+  // break `redirect: 'manual'` detection in the client (and re-serving an
+  // opaque-redirect response from a worker throws).
   if (url.pathname.startsWith('/api/')) {
-    event.respondWith(fetch(request));
     return;
   }
 
@@ -48,16 +48,25 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 3. Static assets: Stale-While-Revalidate
+  // 3. Document navigation: network-first. If the site is behind Authelia and the
+  // proxy redirected us to the (cross-origin) login portal, re-issue a real
+  // navigation instead of serving the portal HTML — or the cached shell — here.
   if (request.mode === 'navigate') {
-    // Navigation: network-first — всегда проверяем свежесть (и Authelia!)
     event.respondWith(
       fetch(request)
         .then((networkResponse) => {
-          // Кэшируем только успешные ответы БЕЗ редиректа
+          if (networkResponse.redirected) {
+            try {
+              if (new URL(networkResponse.url).origin !== self.location.origin) {
+                return Response.redirect(networkResponse.url, 302);
+              }
+            } catch {
+              // Fall through and return the response as-is.
+            }
+          }
           if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
             const responseToCache = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, responseToCache));
+            caches.open(CACHE_NAME).then((cache) => cache.put('/index.html', responseToCache));
           }
           return networkResponse;
         })
@@ -65,7 +74,8 @@ self.addEventListener('fetch', (event) => {
     );
     return;
   }
-  // Обычные GET (assets): stale-while-revalidate как раньше
+
+  // 4. Static assets: stale-while-revalidate
   event.respondWith(
     caches.match(request).then((cachedResponse) => {
       const fetchPromise = fetch(request)

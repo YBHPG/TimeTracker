@@ -2,6 +2,41 @@ import { Task, DayStatItem, DaySummary, CreateTaskPayload, UpdateTaskPayload, Cr
 
 const API_BASE = '/api';
 
+/**
+ * Thrown when the reverse proxy (Authelia forward-auth) challenges the request.
+ * The browser is already being redirected to the login portal, so callers should
+ * not surface this as a regular error.
+ */
+export class AuthRequiredError extends Error {
+  constructor() {
+    super('Authentication required');
+    this.name = 'AuthRequiredError';
+  }
+}
+
+let authRedirecting = false;
+
+/**
+ * Force a real top-level navigation so the reverse proxy can issue the Authelia
+ * challenge. A plain in-page fetch can never show the login page.
+ */
+function onAuthRequired(): void {
+  if (authRedirecting) return;
+  authRedirecting = true;
+  window.location.reload();
+}
+
+async function request(path: string, init: RequestInit = {}): Promise<Response> {
+  const res = await fetch(`${API_BASE}${path}`, { ...init, redirect: 'manual' });
+  // `redirect: 'manual'` turns an Authelia redirect into a readable opaqueredirect
+  // (status 0) instead of a CORS "Failed to fetch".
+  if (res.type === 'opaqueredirect' || res.status === 0 || res.status === 401) {
+    onAuthRequired();
+    throw new AuthRequiredError();
+  }
+  return res;
+}
+
 async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
     let errorDetail = 'Unknown error';
@@ -22,12 +57,12 @@ async function handleResponse<T>(res: Response): Promise<T> {
 export const api = {
   // Tasks
   async getTasks(dateStr: string): Promise<Task[]> {
-    const res = await fetch(`${API_BASE}/tasks?date=${encodeURIComponent(dateStr)}`);
+    const res = await request(`/tasks?date=${encodeURIComponent(dateStr)}`);
     return handleResponse<Task[]>(res);
   },
 
   async createTask(payload: CreateTaskPayload): Promise<Task> {
-    const res = await fetch(`${API_BASE}/tasks`, {
+    const res = await request('/tasks', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -36,12 +71,12 @@ export const api = {
   },
 
   async getTask(taskId: string): Promise<Task> {
-    const res = await fetch(`${API_BASE}/tasks/${taskId}`);
+    const res = await request(`/tasks/${taskId}`);
     return handleResponse<Task>(res);
   },
 
   async updateTask(taskId: string, payload: UpdateTaskPayload): Promise<Task> {
-    const res = await fetch(`${API_BASE}/tasks/${taskId}`, {
+    const res = await request(`/tasks/${taskId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -50,14 +85,14 @@ export const api = {
   },
 
   async deleteTask(taskId: string): Promise<void> {
-    const res = await fetch(`${API_BASE}/tasks/${taskId}`, {
+    const res = await request(`/tasks/${taskId}`, {
       method: 'DELETE',
     });
     return handleResponse<void>(res);
   },
 
   async bulkDeleteTasks(taskIds: string[]): Promise<void> {
-    const res = await fetch(`${API_BASE}/tasks/bulk-delete`, {
+    const res = await request('/tasks/bulk-delete', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ task_ids: taskIds }),
@@ -66,7 +101,7 @@ export const api = {
   },
 
   async startTimer(taskId: string, payload?: TimerActionPayload): Promise<Task> {
-    const res = await fetch(`${API_BASE}/tasks/${taskId}/start`, {
+    const res = await request(`/tasks/${taskId}/start`, {
       method: 'POST',
       headers: payload ? { 'Content-Type': 'application/json' } : undefined,
       body: payload ? JSON.stringify(payload) : undefined,
@@ -75,7 +110,7 @@ export const api = {
   },
 
   async pauseTimer(taskId: string, payload?: TimerActionPayload): Promise<Task> {
-    const res = await fetch(`${API_BASE}/tasks/${taskId}/pause`, {
+    const res = await request(`/tasks/${taskId}/pause`, {
       method: 'POST',
       headers: payload ? { 'Content-Type': 'application/json' } : undefined,
       body: payload ? JSON.stringify(payload) : undefined,
@@ -85,7 +120,7 @@ export const api = {
 
   // Intervals
   async addInterval(taskId: string, payload: CreateIntervalPayload): Promise<TimeInterval> {
-    const res = await fetch(`${API_BASE}/tasks/${taskId}/intervals`, {
+    const res = await request(`/tasks/${taskId}/intervals`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -94,7 +129,7 @@ export const api = {
   },
 
   async updateInterval(intervalId: string, payload: UpdateIntervalPayload): Promise<TimeInterval> {
-    const res = await fetch(`${API_BASE}/intervals/${intervalId}`, {
+    const res = await request(`/intervals/${intervalId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -103,7 +138,7 @@ export const api = {
   },
 
   async deleteInterval(intervalId: string): Promise<void> {
-    const res = await fetch(`${API_BASE}/intervals/${intervalId}`, {
+    const res = await request(`/intervals/${intervalId}`, {
       method: 'DELETE',
     });
     return handleResponse<void>(res);
@@ -111,12 +146,12 @@ export const api = {
 
   // Days & Calendar
   async getDaysStats(): Promise<DayStatItem[]> {
-    const res = await fetch(`${API_BASE}/days`);
+    const res = await request('/days');
     return handleResponse<DayStatItem[]>(res);
   },
 
   async getDaySummary(dateStr: string): Promise<DaySummary> {
-    const res = await fetch(`${API_BASE}/days/${dateStr}/summary`);
+    const res = await request(`/days/${dateStr}/summary`);
     return handleResponse<DaySummary>(res);
   },
 

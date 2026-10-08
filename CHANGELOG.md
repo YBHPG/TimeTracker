@@ -62,6 +62,18 @@ gitGraph
 
 ---
 
+### [v1.6.0] — 2026-10-06
+**Тема:** корректный вход через Authelia (forward-auth) в PWA и жест pull-to-refresh
+
+#### Исправлено:
+- **PWA больше не «съедает» редирект Authelia**: Service Worker ([`frontend/public/sw.js`](file:///Users/bulbadyshka/Documents/programming/personal_projects/timeTracker/frontend/public/sw.js)) не перехватывает запросы к `/api/*` и не отдаёт закэшированный app shell при навигации, если прокси перенаправляет на портал входа. При кросс-доменном редиректе worker возвращает настоящий `Response.redirect(...)`, и браузер открывает страницу входа Authelia вместо «Failed to fetch». Кэш обновлён до `timetracker-v1.2`.
+- **Клиент распознаёт auth-челлендж**: запросы API ([`frontend/src/api/client.ts`](file:///Users/bulbadyshka/Documents/programming/personal_projects/timeTracker/frontend/src/api/client.ts)) выполняются с `redirect: 'manual'`; ответ `opaqueredirect`/`401` определяется как `AuthRequiredError` и инициирует полноценную перезагрузку страницы, которая проходит через Authelia.
+
+#### Добавлено:
+- **Жест pull-to-refresh**: хук [`frontend/src/hooks/usePullToRefresh.ts`](file:///Users/bulbadyshka/Documents/programming/personal_projects/timeTracker/frontend/src/hooks/usePullToRefresh.ts) и индикатор в [`App.tsx`](file:///Users/bulbadyshka/Documents/programming/personal_projects/timeTracker/frontend/src/App.tsx) — потянуть вниз на тач-устройстве запускает `handleRefresh()` (сброс очереди офлайн-действий и перезагрузка данных). Нужен, т.к. `overscroll-behavior-y: none` и режим standalone отключают нативное обновление.
+
+---
+
 ### [v1.5.0] — 2026-10-05
 **Тема:** кнопка ручного обновления и защита от конфликтов синхронизации между устройствами
 
