@@ -520,6 +520,27 @@ def test_meta_endpoint(client):
     assert [c["id"] for c in data["categories"]] == ["work", "personal", "study"]
 
 
+def test_revision_changes_on_mutation(client):
+    first = client.get("/api/revision")
+    assert first.status_code == 200
+    revision_a = first.json()["revision"]
+
+    # Idle reads must return a stable stamp.
+    assert client.get("/api/revision").json()["revision"] == revision_a
+
+    task = client.post(
+        "/api/tasks",
+        json={"title": "Rev", "date": "2026-09-15", "auto_start": False},
+    ).json()
+    revision_b = client.get("/api/revision").json()["revision"]
+    assert revision_b != revision_a
+
+    # Deleting a task flips the stamp even though the newest updated_at may change.
+    client.delete(f"/api/tasks/{task['id']}")
+    revision_c = client.get("/api/revision").json()["revision"]
+    assert revision_c != revision_b
+
+
 def test_read_token_guard(client, monkeypatch):
     monkeypatch.setattr(config, "READ_TOKEN", "secret")
     _seed_interval(client, "Данные", "2026-09-12", "2026-09-12T04:00:00Z", "2026-09-12T05:00:00Z")

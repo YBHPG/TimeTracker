@@ -1,11 +1,12 @@
 import { Task, DayStatItem, DaySummary, CreateTaskPayload, UpdateTaskPayload, CreateIntervalPayload, UpdateIntervalPayload, TimeInterval, TimerActionPayload } from '../types';
+import { notifySessionExpired } from '../pwa-refresh';
 
 const API_BASE = '/api';
 
 /**
- * Thrown when the reverse proxy (Authelia forward-auth) challenges the request.
- * The browser is already being redirected to the login portal, so callers should
- * not surface this as a regular error.
+ * Thrown when the reverse proxy (Authelia forward-auth) rejects the request.
+ * A "session expired" banner is raised for the user, so callers should not
+ * surface this as a regular error.
  */
 export class AuthRequiredError extends Error {
   constructor() {
@@ -14,30 +15,36 @@ export class AuthRequiredError extends Error {
   }
 }
 
-let authRedirecting = false;
-
-/**
- * Force a real top-level navigation so the reverse proxy can issue the Authelia
- * challenge. A plain in-page fetch can never show the login page.
- */
-function onAuthRequired(): void {
-  if (authRedirecting) return;
-  authRedirecting = true;
-  window.location.reload();
-}
-
 async function request(path: string, init: RequestInit = {}): Promise<Response> {
-  const res = await fetch(`${API_BASE}${path}`, { ...init, redirect: 'manual' });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, { ...init, redirect: 'manual' });
+  } catch (err) {
+    // An Authelia challenge from a cross-origin redirect surfaces as a CORS
+    // TypeError ("Failed to fetch"). Only treat it as a dead session when we
+    // believe we are online — a genuine offline state must stay silent.
+    if (err instanceof TypeError && typeof navigator !== 'undefined' && navigator.onLine) {
+      notifySessionExpired();
+    }
+    throw err;
+  }
   // `redirect: 'manual'` turns an Authelia redirect into a readable opaqueredirect
   // (status 0) instead of a CORS "Failed to fetch".
   if (res.type === 'opaqueredirect' || res.status === 0 || res.status === 401) {
-    onAuthRequired();
+    notifySessionExpired();
     throw new AuthRequiredError();
   }
   return res;
 }
 
 async function handleResponse<T>(res: Response): Promise<T> {
+  // The reverse proxy can answer a dead session with the Authelia portal HTML
+  // (status 200) instead of JSON — detect that and surface it as an auth lost.
+  const contentType = res.headers.get('content-type') || '';
+  if (contentType.includes('text/html')) {
+    notifySessionExpired();
+    throw new AuthRequiredError();
+  }
   if (!res.ok) {
     let errorDetail = 'Unknown error';
     try {
@@ -153,6 +160,13 @@ export const api = {
   async getDaySummary(dateStr: string): Promise<DaySummary> {
     const res = await request(`/days/${dateStr}/summary`);
     return handleResponse<DaySummary>(res);
+  },
+
+  // Live sync: cheap change stamp used to poll for cross-device updates
+  async getRevision(): Promise<string> {
+    const res = await request('/revision');
+    const data = await handleResponse<{ revision: string }>(res);
+    return data.revision;
   },
 
   // CSV Export URL

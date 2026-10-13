@@ -1,4 +1,4 @@
-const CACHE_NAME = 'timetracker-v1.2';
+const CACHE_NAME = 'timetracker-__BUILD__';
 const PRECACHE_ASSETS = [
   '/index.html',
   '/manifest.webmanifest',
@@ -8,6 +8,11 @@ const PRECACHE_ASSETS = [
   '/pwa-192x192.png',
   '/pwa-512x512.png'
 ];
+
+// Allow the page to take a newly installed version out of the waiting state.
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') self.skipWaiting();
+});
 
 // Install: precache app shell and activate immediately
 self.addEventListener('install', (event) => {

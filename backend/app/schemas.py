@@ -187,3 +187,7 @@ class MetaOut(BaseModel):
     api_version: str
     categories: List[CategoryInfo]
     default_tz: str
+
+
+class RevisionOut(BaseModel):
+    revision: str

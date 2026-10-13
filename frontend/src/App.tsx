@@ -4,6 +4,7 @@ import { Task, TimeInterval, DayStatItem, TaskCategory } from './types';
 import { useTheme } from './hooks/useTheme';
 import { useTimerTick } from './hooks/useTimerTick';
 import { usePullToRefresh, PULL_REFRESH_THRESHOLD } from './hooks/usePullToRefresh';
+import { useLiveSync } from './hooks/useLiveSync';
 import { TimelineStrip } from './components/TimelineStrip';
 import { TaskItem } from './components/TaskItem';
 import { BottomNav } from './components/BottomNav';
@@ -14,6 +15,9 @@ import { StatsView } from './components/StatsView';
 import { Checkbox, Switch } from './components/Checkbox';
 import { CategoryDropdown } from './components/CategoryDropdown';
 import { ConfirmModal } from './components/ConfirmModal';
+import { PwaBanner } from './components/PwaBanner';
+import { AppVersion } from './components/AppVersion';
+import { initPwaRefresh, setHandlers, applyUpdate, goLogin } from './pwa-refresh';
 import {
   getTodayDateStr,
   getDayOfWeekName,
@@ -98,6 +102,10 @@ export const App: React.FC = () => {
   });
   const [showJustSynced, setShowJustSynced] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // PWA state: an update is downloaded & waiting, or the Authelia session has died.
+  const [updateAvailable, setUpdateAvailable] = useState(false);
+  const [sessionExpired, setSessionExpired] = useState(false);
 
   // Active view tab: 'home' | 'stats'
   const [activeTab, setActiveTab] = useState<'home' | 'stats'>('home');
@@ -212,6 +220,17 @@ export const App: React.FC = () => {
     return unsubscribe;
   }, []);
 
+  // PWA refresh + session probe: registers the service worker, watches for a new
+  // version and surfaces an expired Authelia session as a banner instead of a hang.
+  useEffect(() => {
+    setHandlers({
+      onUpdate: () => setUpdateAvailable(true),
+      onSession: () => setSessionExpired(true),
+      onOk: () => setSessionExpired(false),
+    });
+    initPwaRefresh();
+  }, []);
+
   // Fetch tasks for the selected date (cache-first for instant offline responsiveness)
   const loadTasks = useCallback(async (dateStr: string) => {
     const cached = getCachedTasks(dateStr);
@@ -264,6 +283,18 @@ export const App: React.FC = () => {
       setIsRefreshing(false);
     }
   }, [isRefreshing, selectedDate, loadTasks, loadDaysStats]);
+
+  // Live cross-device refresh: poll the server revision and pull fresh data when
+  // another device (e.g. the phone) has changed something — no manual reload needed.
+  // Skipped while local changes are still queued so optimistic edits stay intact.
+  useLiveSync({
+    enabled: true,
+    refresh: async () => {
+      await Promise.all([loadTasks(selectedDate), loadDaysStats()]);
+    },
+    canRefresh: () =>
+      syncState.pendingCount === 0 && !syncState.isSyncing && !isRefreshing,
+  });
 
   // Pull-to-refresh gesture (touch devices only; standalone PWA has no native one)
   const { pullDistance, isRefreshing: isPullRefreshing } = usePullToRefresh(
@@ -947,6 +978,8 @@ export const App: React.FC = () => {
                     Календарь
                   </button>
                 </div>
+
+                <AppVersion />
               </div>
             </div>
 
@@ -1193,6 +1226,17 @@ export const App: React.FC = () => {
           onThemeChange={setTheme}
         />
       </div>
+
+      {/* PWA update / session banners (fixed, above bottom navigation) */}
+      <PwaBanner
+        updateAvailable={updateAvailable}
+        sessionExpired={sessionExpired}
+        onUpdate={() => {
+          void applyUpdate();
+        }}
+        onDismissUpdate={() => setUpdateAvailable(false)}
+        onLogin={goLogin}
+      />
 
       {/* Modals */}
       <NewTaskModal

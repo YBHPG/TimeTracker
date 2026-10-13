@@ -370,6 +370,24 @@ def delete_interval(db: Session, interval_id: str) -> bool:
     return True
 
 
+def get_revision(db: Session) -> str:
+    """Cheap opaque change stamp for cross-device sync.
+
+    Combines the newest modification time of tasks and intervals with their row
+    counts, so both edits and deletions flip the stamp. Clients poll this instead
+    of refetching the full task/day payloads on every tick.
+    """
+    task_max = db.query(func.max(Task.updated_at)).scalar()
+    interval_max = db.query(func.max(TimeInterval.updated_at)).scalar()
+    task_count = db.query(func.count(Task.id)).scalar() or 0
+    interval_count = db.query(func.count(TimeInterval.id)).scalar() or 0
+
+    def fmt(value) -> str:
+        return value.isoformat() if hasattr(value, "isoformat") else (str(value) if value else "")
+
+    return "|".join([fmt(task_max), fmt(interval_max), str(task_count), str(interval_count)])
+
+
 def get_days_stats(db: Session) -> List[schemas.DayStatItem]:
     """Returns aggregated stats for all dates that have tasks."""
     tasks = db.query(Task).all()
